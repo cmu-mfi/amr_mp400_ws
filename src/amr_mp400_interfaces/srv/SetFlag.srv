@@ -1,4 +1,5 @@
 char flag
-int64 ind
+int64 index
 ---
 bool success
+string msg
