@@ -37,7 +37,7 @@ class WaypointSrv(Node):
     def waypoint_callback(self, request, response):
         # What do we need to do here? 
         # - Differentiate between wanting to add/overwrite/delete/go
-        # - Add a marker for docking stations
+        # - Add a marker for docking stations TODO
         # Flags for operations -> a - Add / o - overwrite / w - delete all and add new / d - delete / g - go
         flag = request.flag
         index = request.index
