@@ -1,0 +1,4 @@
+char flag
+int64 ind
+---
+bool success
