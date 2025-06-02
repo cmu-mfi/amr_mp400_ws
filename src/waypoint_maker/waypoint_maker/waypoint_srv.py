@@ -64,23 +64,20 @@ class WaypointSrv(Node):
             case "a":
                 # Dont need index to add, need robot pose
                 self.open_file(flag)
-                response.success = self.add_waypoint(pose_arr)
+                response.success = self.simple_write(pose_arr)
 
-                pass
 
             case "o":
                 # Need index to overwrite, need new robot pose
                 flag = 'r+' # r/w to file, file pointer at start of file
                 self.open_file(flag)
                 response.success = self.overwrite_waypoint(index, pose_arr)
-                pass
 
             case "w":
                 # Dont need index to overwrite all, need robot pose
                 self.open_file(flag)
-                response.success = self.overwrite_all(pose_arr)
+                response.success = self.simple_write(pose_arr)
 
-                pass
 
             case "d":
                 flag = 'r+' # r/w to file, file pointer at start of file
@@ -88,25 +85,23 @@ class WaypointSrv(Node):
                 self.open_file(flag)
                 response.success = self.delete_waypoint(index)
 
-                pass
 
             case "g":
-                flag = 'r+' # r/w to file, file pointer at start of file
+                flag = 'r' # read file, file pointer at start of file
                 # Need index to go to, dont need robot pose
                 self.open_file(flag)
                 response.success = self.publish_waypoint(index)
 
-                pass
 
             case _:
                 self.get_logger().info("Bad Flag Given: Try 'h' for help, or one of ['a', 'o', 'w', 'd', 'g'] for functionality")
                 response.success = True
                 
-                pass
 
-        pass
-
-    def add_waypoint(self, pose):
+        return response
+    
+    def simple_write(self, pose):
+        # Appending and overwriting all are the same process internally, but just with different file opening methods
         self.file.write(f'{pose} \n')
         return True
 
@@ -114,18 +109,39 @@ class WaypointSrv(Node):
         success = self.write_to_line(index, 'o', pose=pose)
         return success
 
-    def overwrite_all(self, pose):
-        pass
-
     def delete_waypoint(self, index):
         success = self.write_to_line(index, 'd')
         return success
 
     def publish_waypoint(self, index):
-        pass
+        lines = self.file.readlines()
+        if not self.good_index(index, lines):
+            return False
+        
 
-    def good_index(self, index):
-        pass
+        pose = self.create_arr_from_string(lines, index)
+
+        self.pub = self.create_publisher(PoseStamped, 'robot1/goal_pose', 10)
+
+        goal_pose = PoseStamped()
+        goal_pose.header.frame_id = 'map'
+        goal_pose.header.stamp = self.get_clock().now().to_msg()
+        goal_pose.pose.position.x = float(pose[0])
+        goal_pose.pose.position.z = float(pose[2])
+        goal_pose.pose.position.y = float(pose[1])
+        goal_pose.pose.orientation.x = float(pose[3])
+        goal_pose.pose.orientation.y = float(pose[4])
+        goal_pose.pose.orientation.z = float(pose[5])
+        goal_pose.pose.orientation.w = float(pose[6])
+
+        self.pub.publish(goal_pose)
+
+############################################### Helper Functions ##################################################################################
+    def good_index(self, index, lines):
+        len = len(lines)
+        if index < 0 or index >= len:
+            return False
+        return True
 
     def open_file(self, flag):
         # Current Working Directory when run is wherever you run it, but want relative to program (the directory it is in)
@@ -142,7 +158,7 @@ class WaypointSrv(Node):
     def write_to_line(self, index, flag, pose = None):
         # Used for both overwrite and delete as they are basically the same process, just different things are written to the line
         lines = self.file.readlines()
-        if index < 0 or index >= len(lines):
+        if not self.good_index(index, lines):
             return False
 
         if flag == 'd':
@@ -167,8 +183,14 @@ class WaypointSrv(Node):
                                 pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
         return pose_array
 
+    def create_arr_from_string(self, lines, index):
+        arr = []
+        for num in lines[index].strip()[1:-2].split(','):
+            arr.append(float(num))
 
+        return arr
 
+####################################################### End Helpers ##################################################################################
 
 def main(args=None):
     rclpy.init(args=args)
