@@ -27,6 +27,8 @@ class WaypointSrv(Node):
         )
 
         self.pub = self.create_publisher(PoseStamped, 'robot1/goal_pose', 10)
+        dir = os.path.dirname(os.path.abspath(__file__))
+        self.file_path = os.path.join(dir, "robot_poses.txt")
         self.file = None
 
         self.latest = None
@@ -149,34 +151,33 @@ class WaypointSrv(Node):
 
     def open_file(self, flag):
         # Current Working Directory when run is wherever you run it, but want relative to program (the directory it is in)
-        dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(dir, "robot_poses.txt")
-        print(file_path)
-        if not os.path.exists(file_path):
-            self.file = open(file_path, 'w')
+        print(self.file_path)
+        if not os.path.exists(self.file_path):
+            self.file = open(self.file_path, 'w')
         else: 
-            self.file = open(file_path, flag)
+            self.file = open(self.file_path, flag)
 
         return
     
     def write_to_line(self, index, flag, pose = None):
         # Used for both overwrite and delete as they are basically the same process, just different things are written to the line
-        lines = self.file.readlines()
-        self.file.close()
-        self.file = self.open_file('w')
+        with open(self.file_path, 'r') as file:
+            lines = file.readlines()
+
         if not self.good_index(index, lines):
             return False
-
-        if flag == 'd':
-            text = ""
-        elif flag == 'o':
-            text = f"{pose} \n"
-        else:
-            return False
         
-        lines[index] = text
+        if flag != 'd' or flag != 'o':
+            return False
 
-        self.file.writelines(lines)
+        with open(self.file_path, 'w') as file:
+            for file_index, line in enumerate(lines):
+                if index == file_index:
+                    if flag == 'o': # Only check for o flag because d flag continues anyway
+                        file.write(pose)
+                    continue
+                file.write(line)
+
 
         return True
 
@@ -204,7 +205,8 @@ def main(args=None):
     waypoint_srv = WaypointSrv()
 
     rclpy.spin(waypoint_srv)
-    waypoint_srv.file.close()
+    if waypoint_srv.file:
+        waypoint_srv.file.close()
     
     rclpy.shutdown()
 
