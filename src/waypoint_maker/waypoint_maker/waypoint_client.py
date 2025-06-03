@@ -30,7 +30,7 @@ def main(args=None):
 
     waypoint_client = WaypointClientAsync()
 
-    response = waypoint_client.send_request(str(sys.argv[1]), int(sys.argv[2]))
+    response = waypoint_client.send_request(ord(sys.argv[1]), int(sys.argv[2]))
 
     waypoint_client.get_logger().info(
         'Success: %d \nReturn Message: %s' % (response.success, response.msg)

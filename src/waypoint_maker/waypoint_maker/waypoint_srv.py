@@ -1,9 +1,9 @@
-import sys
 import os
 import rclpy
+import json
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 
 from amr_mp400_interfaces.srv import SetFlag
 
@@ -26,7 +26,7 @@ class WaypointSrv(Node):
             qos_profile=subscriber_qos
         )
 
-        self.pub = None
+        self.pub = self.create_publisher(PoseStamped, 'robot1/goal_pose', 10)
         self.file = None
 
         self.latest = None
@@ -36,17 +36,11 @@ class WaypointSrv(Node):
 
     def waypoint_callback(self, request, response):
         # What do we need to do here? 
-        # - Differentiate between wanting to add/overwrite/delete/go
         # - Add a marker for docking stations TODO
         # Flags for operations -> a - Add / o - overwrite / w - delete all and add new / d - delete / g - go
-        flag = request.flag
+        flag = chr(request.flag)
         index = request.index
         
-
-        # Have to create a subscriber to PoseStampedWithCovariance (?) that gets the pose of the robot to use
-        # How do I do the subscriber thing / publisher thing <- Just start writing code bruh
-        # From the subscriber need to get the pose that basically all functions use
-
         if not self.latest:
             response.success = False
             response.msg = "Couldn't get robot pose"
@@ -65,6 +59,7 @@ class WaypointSrv(Node):
                 # Dont need index to add, need robot pose
                 self.open_file(flag)
                 response.success = self.simple_write(pose_arr)
+                response.success = "Wrote Robot Pose!"
 
 
             case "o":
@@ -72,11 +67,16 @@ class WaypointSrv(Node):
                 flag = 'r+' # r/w to file, file pointer at start of file
                 self.open_file(flag)
                 response.success = self.overwrite_waypoint(index, pose_arr)
+                if response.success:
+                    response.msg = "Waypoint Overwritten!"
+                else:
+                    response.msg = "Couldnt overwrite waypoint, give good index"
 
             case "w":
                 # Dont need index to overwrite all, need robot pose
                 self.open_file(flag)
                 response.success = self.simple_write(pose_arr)
+                response.msg = "Deleted All And Wrote Robot Pose!"
 
 
             case "d":
@@ -84,6 +84,7 @@ class WaypointSrv(Node):
                 # Need index to delete, dont need new robot pose
                 self.open_file(flag)
                 response.success = self.delete_waypoint(index)
+                response.msg = "Waypoint Deleted!"
 
 
             case "g":
@@ -91,11 +92,16 @@ class WaypointSrv(Node):
                 # Need index to go to, dont need robot pose
                 self.open_file(flag)
                 response.success = self.publish_waypoint(index)
+                if response.success: 
+                    response.msg = "Waypoint Published!"
+                else:
+                    response.msg = "Waypoint couldnt be published, give a good index"
 
 
             case _:
                 self.get_logger().info("Bad Flag Given: Try 'h' for help, or one of ['a', 'o', 'w', 'd', 'g'] for functionality")
                 response.success = True
+                response.msg = "Bad Flag Given"
                 
 
         return response
@@ -120,8 +126,6 @@ class WaypointSrv(Node):
         
 
         pose = self.create_arr_from_string(lines, index)
-
-        self.pub = self.create_publisher(PoseStamped, 'robot1/goal_pose', 10)
 
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = 'map'

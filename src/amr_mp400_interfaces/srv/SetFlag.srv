@@ -1,4 +1,4 @@
-char flag
+int8 flag
 int64 index
 ---
 bool success
