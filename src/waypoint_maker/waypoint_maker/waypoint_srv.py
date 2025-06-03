@@ -66,8 +66,6 @@ class WaypointSrv(Node):
 
             case "o":
                 # Need index to overwrite, need new robot pose
-                flag = 'r+' # r/w to file, file pointer at start of file
-                self.open_file(flag)
                 response.success = self.overwrite_waypoint(index, pose_arr)
                 if response.success:
                     response.msg = "Waypoint Overwritten!"
@@ -82,9 +80,7 @@ class WaypointSrv(Node):
 
 
             case "d":
-                flag = 'r+' # r/w to file, file pointer at start of file
                 # Need index to delete, dont need new robot pose
-                self.open_file(flag)
                 response.success = self.delete_waypoint(index)
                 response.msg = "Waypoint Deleted!"
 
