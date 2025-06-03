@@ -41,7 +41,7 @@ class WaypointSrv(Node):
         # - Add a marker for docking stations TODO
         # Flags for operations -> a - Add / o - overwrite / w - delete all and add new / d - delete / g - go
         flag = chr(request.flag)
-        index = request.index
+        index = str(request.index)
         
         if not self.latest:
             response.success = False
@@ -82,7 +82,10 @@ class WaypointSrv(Node):
             case "d":
                 # Need index to delete, dont need new robot pose
                 response.success = self.delete_waypoint(index)
-                response.msg = "Waypoint Deleted!"
+                if not response.success:
+                    response.msg = "Waypoint couldnt be deleted"
+                else:
+                    response.msg = "Waypoint Deleted!"
 
 
             case "g":
@@ -98,7 +101,7 @@ class WaypointSrv(Node):
                 self.get_logger().info("Bad Flag Given: Try 'h' for help, or one of ['a', 'o', 'w', 'd', 'g'] for functionality")
                 response.success = True
                 response.msg = "Bad Flag Given"
-                
+               
         with open(self.file_path, 'w') as file:
             dict_str = json.dumps(self.pose_dict, indent=4)
             file.write(dict_str)
@@ -125,14 +128,13 @@ class WaypointSrv(Node):
     def delete_waypoint(self, index):
         if not self.good_index(index):
             return False
-        
-        del self.pose_dict[index]
 
+        print(self.pose_dict)
+        del self.pose_dict[index]
         return True
 
     def publish_waypoint(self, index):
-        lines = self.file.readlines()
-        if not self.good_index(index, lines):
+        if not self.good_index(index):
             return False
         
 
@@ -151,9 +153,11 @@ class WaypointSrv(Node):
 
         self.pub.publish(goal_pose)
 
+        return True
+
 ############################################### Helper Functions ##################################################################################
     def good_index(self, index):
-        if index not in self.pose_dict.keys():
+        if str(index) not in list(self.pose_dict.keys()):
             return False
         return True
 
@@ -163,6 +167,8 @@ class WaypointSrv(Node):
     
     def create_pose_dict(self, file):
         content = file.read()
+        if os.path.getsize(self.file_path) == 0:
+            return {}
         pose_dict = json.loads(content)
         return pose_dict
     
