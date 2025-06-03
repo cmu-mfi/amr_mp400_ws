@@ -48,8 +48,10 @@ class WaypointSrv(Node):
             response.msg = "Couldn't get robot pose"
             return response
 
-        pose = self.latest
-        pose_arr = self.create_pose_array(pose)
+        pose = self.create_pose_array(self.latest)
+        with open(self.file_path, 'r') as file:
+            self.pose_dict = self.create_pose_dict(file)
+        # ONLY NEED TO OPEN FILE ONCE AND GET THE POSE DICT AND WORK ON THAT AND THEN WRITE TO THE FILE IN THE END 
 
         match flag:
 
@@ -59,14 +61,13 @@ class WaypointSrv(Node):
 
             case "a":
                 # Dont need index to add, need robot pose
-                self.open_file(flag)
-                response.success = self.simple_write(pose_arr)
+                response.success = self.append_write(pose)
                 response.msg = "Wrote Robot Pose!"
 
 
             case "o":
                 # Need index to overwrite, need new robot pose
-                response.success = self.overwrite_waypoint(index, pose_arr)
+                response.success = self.overwrite_waypoint(index, pose)
                 if response.success:
                     response.msg = "Waypoint Overwritten!"
                 else:
@@ -74,8 +75,7 @@ class WaypointSrv(Node):
 
             case "w":
                 # Dont need index to overwrite all, need robot pose
-                self.open_file(flag)
-                response.success = self.simple_write(pose_arr)
+                response.success = self.overwrite_all(pose)
                 response.msg = "Deleted All And Wrote Robot Pose!"
 
 
@@ -86,9 +86,7 @@ class WaypointSrv(Node):
 
 
             case "g":
-                flag = 'r' # read file, file pointer at start of file
                 # Need index to go to, dont need robot pose
-                self.open_file(flag)
                 response.success = self.publish_waypoint(index)
                 if response.success: 
                     response.msg = "Waypoint Published!"
@@ -101,22 +99,36 @@ class WaypointSrv(Node):
                 response.success = True
                 response.msg = "Bad Flag Given"
                 
-        if self.file != None:
-            self.file.close()
+        with open(self.file_path, 'w') as file:
+            dict_str = json.dumps(self.pose_dict, indent=4)
+            file.write(dict_str)
         return response 
     
-    def simple_write(self, pose):
-        # Appending and overwriting all are the same process internally, but just with different file opening methods
-        self.file.write(f'{pose} \n')
+    def append_write(self, pose):
+        ind = len(self.pose_dict.keys())
+        self.pose_dict[ind] = pose
+        return True
+    
+    def overwrite_all(self, pose):
+        self.pose_dict.clear()
+        self.pose_dict[0] = pose
         return True
 
     def overwrite_waypoint(self, index, pose):
-        success = self.write_to_line(index, 'o', pose=pose)
-        return success
+        if not self.good_index(index):
+            return False
+        
+        self.pose_dict[index] = pose
+
+        return True
 
     def delete_waypoint(self, index):
-        success = self.write_to_line(index, 'd')
-        return success
+        if not self.good_index(index):
+            return False
+        
+        del self.pose_dict[index]
+
+        return True
 
     def publish_waypoint(self, index):
         lines = self.file.readlines()
@@ -124,7 +136,7 @@ class WaypointSrv(Node):
             return False
         
 
-        pose = self.create_arr_from_string(lines, index)
+        pose = self.pose_dict[index]
 
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = 'map'
@@ -140,59 +152,24 @@ class WaypointSrv(Node):
         self.pub.publish(goal_pose)
 
 ############################################### Helper Functions ##################################################################################
-    def good_index(self, index, lines):
-        n = len(lines)
-        if index < 0 or index >= n:
+    def good_index(self, index):
+        if index not in self.pose_dict.keys():
             return False
-        return True
-
-    def open_file(self, flag):
-        # Current Working Directory when run is wherever you run it, but want relative to program (the directory it is in)
-        print(self.file_path)
-        if not os.path.exists(self.file_path):
-            self.file = open(self.file_path, 'w')
-        else: 
-            self.file = open(self.file_path, flag)
-
-        return
-    
-    def write_to_line(self, index, flag, pose = None):
-        # Used for both overwrite and delete as they are basically the same process, just different things are written to the line
-        with open(self.file_path, 'r') as file:
-            lines = file.readlines()
-
-        if not self.good_index(index, lines):
-            return False
-        
-        if flag != 'd' or flag != 'o':
-            return False
-
-        with open(self.file_path, 'w') as file:
-            for file_index, line in enumerate(lines):
-                if index == file_index:
-                    if flag == 'o': # Only check for o flag because d flag continues anyway
-                        file.write(pose)
-                    continue
-                file.write(line)
-
-
         return True
 
     def post_help_msg(self):
         # Used in h flag and bad flag to get people up to speed
         pass
     
+    def create_pose_dict(self, file):
+        content = file.read()
+        pose_dict = json.loads(content)
+        return pose_dict
+    
     def create_pose_array(self, pose):
         pose_array = [pose.position.x, pose.position.y, pose.position.z, 
                                 pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
         return pose_array
-
-    def create_arr_from_string(self, lines, index):
-        arr = []
-        for num in lines[index].strip()[1:-2].split(','):
-            arr.append(float(num))
-
-        return arr
 
 ####################################################### End Helpers ##################################################################################
 
