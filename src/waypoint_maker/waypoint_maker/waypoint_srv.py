@@ -142,8 +142,8 @@ class WaypointSrv(Node):
 
 ############################################### Helper Functions ##################################################################################
     def good_index(self, index, lines):
-        len = len(lines)
-        if index < 0 or index >= len:
+        n = len(lines)
+        if index < 0 or index >= n:
             return False
         return True
 
