@@ -101,8 +101,9 @@ class WaypointSrv(Node):
                 response.success = True
                 response.msg = "Bad Flag Given"
                 
-
-        return response
+        if self.file != None:
+            self.file.close()
+        return response 
     
     def simple_write(self, pose):
         # Appending and overwriting all are the same process internally, but just with different file opening methods
@@ -201,8 +202,6 @@ def main(args=None):
     waypoint_srv = WaypointSrv()
 
     rclpy.spin(waypoint_srv)
-    if waypoint_srv.file:
-        waypoint_srv.file.close()
     
     rclpy.shutdown()
 
