@@ -162,6 +162,7 @@ class WaypointSrv(Node):
     def write_to_line(self, index, flag, pose = None):
         # Used for both overwrite and delete as they are basically the same process, just different things are written to the line
         lines = self.file.readlines()
+        self.file.close()
         self.file = self.open_file('w')
         if not self.good_index(index, lines):
             return False
