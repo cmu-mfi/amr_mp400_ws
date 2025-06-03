@@ -59,7 +59,7 @@ class WaypointSrv(Node):
                 # Dont need index to add, need robot pose
                 self.open_file(flag)
                 response.success = self.simple_write(pose_arr)
-                response.success = "Wrote Robot Pose!"
+                response.msg = "Wrote Robot Pose!"
 
 
             case "o":
