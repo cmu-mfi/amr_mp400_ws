@@ -21,7 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'waypoint_service = waypoint_maker.waypoint_srv:main',
-            'waypoint_client = waypoint_maker.waypoint_client:main'
+            'waypoint_client = waypoint_maker.waypoint_client:main',
+            'fiducial_front = waypoint_maker.front_fiducial_detector:main'
         ],
     },
 )
