@@ -1,14 +1,16 @@
 import rclpy
 import rclpy.duration
+import numpy as np
 from rclpy.node import Node
-from aruco_msgs.msg import MarkerArray
+from aruco_msgs.msg import MarkerArray, Marker
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped
 from tf2_ros import Buffer, TransformListener 
 from transforms3d.euler import euler2quat, quat2euler
 from transforms3d.quaternions import quat2mat, mat2quat
-import numpy as np
+from tf2_geometry_msgs import do_transform_pose
+
 
 
 class FiducialDetector(Node):
@@ -23,15 +25,27 @@ class FiducialDetector(Node):
 
         self.sub = self.create_subscription(
             MarkerArray,
-            '/robot/marker_publisher/markers', 
+            '/robot1/marker_publisher/markers', 
             self.sub_callback,
             10)
+        
+        self.pose_sub = self.create_subscription(
+            PoseWithCovarianceStamped,
+            '/robot1/map_pose',
+            self.pose_callback,
+            10
+        )
+
+        self.latest_pose = None
         
         self.client = ActionClient(
                 self, NavigateToPose, "/robot1/navigate_to_pose"
             )
 
         self.distance = 0.5 # Change distance from marker if needed
+
+    def pose_callback(self, msg: PoseWithCovarianceStamped):
+        self.latest_pose = msg.pose.pose
 
     def sub_callback(self, markers: MarkerArray):
         if self.goal_sent:
@@ -48,34 +62,46 @@ class FiducialDetector(Node):
         
         # Now we only have one marker
 
-        marker = markers.markers[0]
-    
+        marker: Marker = markers.markers[0]
+        self.get_logger().info(f"Marker with id {marker.id} found!")
         # Create proper PoseStamped for transformation
         pose_stamped = PoseStamped()
-        pose_stamped.header = marker.header  # Critical: maintain original frame_id
-        pose_stamped.pose = marker.pose.pose  # Extract geometry_msgs/Pose
+        pose_stamped.header = marker.header
+        pose_stamped.pose = marker.pose.pose
     
         try:
-            # Transform to map frame
-            transformed_pose = self.tf_buffer.transform(
-                pose_stamped,
+            # Get latest transform
+            map_to_odom = self.tf_buffer.lookup_transform(
                 'map',
-                timeout=rclpy.duration.Duration(seconds=0.1)
+                'robot1/odom',
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.5)
             )
+
+            odom_to_camera = self.tf_buffer.lookup_transform(
+                'robot1/odom',
+                pose_stamped.header.frame_id,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.5)
+            )
+
+            odom_frame = do_transform_pose(pose_stamped.pose, odom_to_camera)
+            # Apply transform manually
+            transformed_pose = do_transform_pose(odom_frame, map_to_odom)
                 
         except Exception as e:
             self.get_logger().error(f"TF transform failed: {str(e)}")
             return
 
-        q = transformed_pose.pose.orientation
+        q = transformed_pose.orientation
         q_np = [q.w, q.x, q.y, q.z]
 
         R = quat2mat(q_np)
-        z_axis = R[:3][2]
+        z_axis = R[:3, 2]
         z_x, z_y = z_axis[0], z_axis[1]
 
-        x_goal = transformed_pose.pose.position.x - self.distance * z_x
-        y_goal = transformed_pose.pose.position.y - self.distance * z_y
+        x_goal = transformed_pose.position.x - self.distance * z_x
+        y_goal = transformed_pose.position.y - self.distance * z_y
 
         _, _, yaw_marker = quat2euler(q_np)
         yaw_goal = yaw_marker + np.pi  # 180° rotation (π radians)
@@ -94,7 +120,7 @@ class FiducialDetector(Node):
 
         self.get_logger().info('Sent goal pose to nav2')
         self.goal_sent = True
-        self.sub.destroy()
+        self.sub = None
 
         goal_future = self.client.send_goal_async(goal_msg)
         goal_future.add_done_callback(self.goal_response)
@@ -113,7 +139,7 @@ class FiducialDetector(Node):
     def goal_result(self, future):
         result = future.result().result
         if result:
-            self.get_logger().info(f"Nav2 completed with status: {result.status}")
+            self.get_logger().info(f"Nav2 completed")
         else:
             self.get_logger().error("Nav2 failed to complete!")
 
