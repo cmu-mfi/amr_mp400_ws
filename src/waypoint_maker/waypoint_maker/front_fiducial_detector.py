@@ -1,11 +1,12 @@
 import rclpy
 import rclpy.duration
 import numpy as np
+import tf2_geometry_msgs
 from rclpy.node import Node
 from aruco_msgs.msg import MarkerArray, Marker
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
-from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, Pose
 from tf2_ros import Buffer, TransformListener 
 from transforms3d.euler import euler2quat, quat2euler
 from transforms3d.quaternions import quat2mat, mat2quat
@@ -61,16 +62,11 @@ class FiducialDetector(Node):
             return
         
         # Now we only have one marker
-
         marker: Marker = markers.markers[0]
         self.get_logger().info(f"Marker with id {marker.id} found!")
-        # Create proper PoseStamped for transformation
-        pose_stamped = PoseStamped()
-        pose_stamped.header = marker.header
-        pose_stamped.pose = marker.pose.pose
-    
-        try:
-            # Get latest transform
+
+        try: 
+            
             map_to_odom = self.tf_buffer.lookup_transform(
                 'map',
                 'robot1/odom',
@@ -85,38 +81,28 @@ class FiducialDetector(Node):
                 timeout=rclpy.duration.Duration(seconds=0.5)
             )
 
-            odom_frame = do_transform_pose(pose_stamped.pose, odom_to_camera)
-            # Apply transform manually
-            transformed_pose = do_transform_pose(odom_frame, map_to_odom)
-                
+
         except Exception as e:
-            self.get_logger().error(f"TF transform failed: {str(e)}")
-            return
+            self.get_logger().info(f"Transform error with {e}")
 
-        q = transformed_pose.orientation
-        q_np = [q.w, q.x, q.y, q.z]
+        pose_stamped = PoseStamped()
+        pose_stamped.header = marker.header
+        pose_stamped.pose = marker.pose.pose
 
-        R = quat2mat(q_np)
-        z_axis = R[:3, 2]
-        z_x, z_y = z_axis[0], z_axis[1]
+        marker_pose = marker.pose.pose
 
-        x_goal = transformed_pose.position.x - self.distance * z_x
-        y_goal = transformed_pose.position.y - self.distance * z_y
+        desired_pose = marker_pose
+        desired_pose.position.z += self.distance
 
-        _, _, yaw_marker = quat2euler(q_np)
-        yaw_goal = yaw_marker + np.pi  # 180° rotation (π radians)
-        q_goal = euler2quat(0, 0, yaw_goal)  # Convert back to quaternion
+        # Get point pose in map frame
+        point_pose = do_transform_pose(do_transform_pose(desired_pose, odom_to_camera), map_to_odom) # assume we have the transform from robot to marker
 
-        goal_msg = NavigateToPose.Goal()
-        goal_msg.pose.header.frame_id = 'map'  # Or 'map' if localized
-        goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
-        goal_msg.pose.pose.position.x = x_goal
-        goal_msg.pose.pose.position.y = y_goal
-        goal_msg.pose.pose.orientation.x = q_goal[1]  # transforms3d uses [w, x, y, z]
-        goal_msg.pose.pose.orientation.y = q_goal[2]
-        goal_msg.pose.pose.orientation.z = q_goal[3]
-        goal_msg.pose.pose.orientation.w = q_goal[0]
 
+        goal_msg = PoseStamped()
+        goal_msg.header.frame_id = 'map'
+        goal_msg.header.stamp = self.get_clock().now().to_msg()
+        goal_msg.pose.position = self.latest_pose.position
+        goal_msg.pose.orientation = point_pose.orientation
 
         self.get_logger().info('Sent goal pose to nav2')
         self.goal_sent = True
