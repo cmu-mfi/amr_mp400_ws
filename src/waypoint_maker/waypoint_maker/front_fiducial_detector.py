@@ -91,18 +91,34 @@ class FiducialDetector(Node):
 
         marker_pose = marker.pose.pose
 
-        desired_pose = marker_pose
-        desired_pose.position.z += self.distance
+        # desired_pose = marker_pose
+        # desired_pose.position.z += self.distance
 
         # Get point pose in map frame
-        point_pose = do_transform_pose(do_transform_pose(desired_pose, odom_to_camera), map_to_odom) # assume we have the transform from robot to marker
+        point_pose = do_transform_pose(do_transform_pose(marker_pose, odom_to_camera), map_to_odom) # assume we have the transform from robot to marker
 
+        q = point_pose.orientation
+        q_np = [q.w, q.x, q.y, q.z]
+
+        # R = quat2mat(q_np)
+        # z_axis = R[:3, 2]
+        # z_x, z_y = z_axis[0], z_axis[1]
+
+        _, _, yaw_marker = quat2euler(q_np)
+        yaw_goal = yaw_marker + np.pi  # 180° rotation (π radians)
+        q_goal = euler2quat(0, 0, yaw_goal)  # Convert back to quaternion
+    
 
         goal_msg = PoseStamped()
         goal_msg.header.frame_id = 'map'
         goal_msg.header.stamp = self.get_clock().now().to_msg()
         goal_msg.pose.position = self.latest_pose.position
-        goal_msg.pose.orientation = point_pose.orientation
+        goal_msg.pose.position.x += 0.2
+        goal_msg.pose.pose.orientation.x = q_goal[1]  # transforms3d uses [w, x, y, z]
+        goal_msg.pose.pose.orientation.y = q_goal[2]
+        goal_msg.pose.pose.orientation.z = q_goal[3]
+        goal_msg.pose.pose.orientation.w = q_goal[0]
+
 
         self.get_logger().info('Sent goal pose to nav2')
         self.goal_sent = True
