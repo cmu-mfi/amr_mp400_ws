@@ -61,22 +61,21 @@ class FiducialDetector(Node):
             self.get_logger().info('More than one marker found, cant dock')
             return
         
+        
         # Now we only have one marker
         marker: Marker = markers.markers[0]
+
+        if marker.id > 20:
+            self.get_logger().info(f"Marker id too high: {marker.id}")
+            return
+        
         self.get_logger().info(f"Marker with id {marker.id} found!")
 
         try: 
-            
-            map_to_odom = self.tf_buffer.lookup_transform(
-                'map',
-                'robot1/odom',
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.5)
-            )
 
-            odom_to_camera = self.tf_buffer.lookup_transform(
-                'robot1/odom',
-                pose_stamped.header.frame_id,
+            map_to_marker = self.tf_buffer.lookup_transform(
+                'robot1/base_link',
+                marker.header.frame_id,
                 rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=0.5)
             )
@@ -84,6 +83,7 @@ class FiducialDetector(Node):
 
         except Exception as e:
             self.get_logger().info(f"Transform error with {e}")
+            exit(1)
 
         pose_stamped = PoseStamped()
         pose_stamped.header = marker.header
@@ -95,25 +95,32 @@ class FiducialDetector(Node):
         # desired_pose.position.z += self.distance
 
         # Get point pose in map frame
-        point_pose = do_transform_pose(do_transform_pose(marker_pose, odom_to_camera), map_to_odom) # assume we have the transform from robot to marker
+        point_pose = do_transform_pose(marker_pose, map_to_marker) # assume we have the transform from robot to marker
 
         q = point_pose.orientation
         q_np = [q.w, q.x, q.y, q.z]
 
-        # R = quat2mat(q_np)
-        # z_axis = R[:3, 2]
-        # z_x, z_y = z_axis[0], z_axis[1]
-
         _, _, yaw_marker = quat2euler(q_np)
-        yaw_goal = yaw_marker + np.pi  # 180° rotation (π radians)
+        yaw_goal = yaw_marker + np.pi
+
         q_goal = euler2quat(0, 0, yaw_goal)  # Convert back to quaternion
+
+        R = quat2mat(q_np)
+        z_axis = R[:3, 2]  # Forward vector of the marker
+
+        
+        # Calculate desired position: move forward along marker's forward vector
+        # Dont think this makes too much sense but yeah :) (Might also just be = not +=)
+        desired_position = point_pose.position
+        desired_position.x += z_axis[0] * self.distance
+        desired_position.y += z_axis[1] * self.distance
+        desired_position.z = 0.0
     
 
-        goal_msg = PoseStamped()
-        goal_msg.header.frame_id = 'map'
-        goal_msg.header.stamp = self.get_clock().now().to_msg()
-        goal_msg.pose.position = self.latest_pose.position
-        goal_msg.pose.position.x += 0.2
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose.header.frame_id = 'map'
+        goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
+        goal_msg.pose.pose.position = desired_position
         goal_msg.pose.pose.orientation.x = q_goal[1]  # transforms3d uses [w, x, y, z]
         goal_msg.pose.pose.orientation.y = q_goal[2]
         goal_msg.pose.pose.orientation.z = q_goal[3]
@@ -145,12 +152,12 @@ class FiducialDetector(Node):
         else:
             self.get_logger().error("Nav2 failed to complete!")
 
-        self.goal_sent = False
-        self.sub = self.create_subscription(
-            MarkerArray,
-            '/robot/marker_publisher/markers', 
-            self.sub_callback,
-            10)
+        # self.goal_sent = False
+        # self.sub = self.create_subscription(
+        #     MarkerArray,
+        #     '/robot/marker_publisher/markers', 
+        #     self.sub_callback,
+        #     10)
         
 def main():
     rclpy.init()
