@@ -4,6 +4,10 @@ import json
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from std_srvs.srv import Trigger
+from rclpy.action import ActionClient
+from nav2_msgs.action import NavigateToPose
+
 
 from amr_mp400_interfaces.srv import SetFlag
 
@@ -26,7 +30,10 @@ class WaypointSrv(Node):
             qos_profile=subscriber_qos
         )
 
-        self.pub = self.create_publisher(PoseStamped, 'robot1/goal_pose', 10)
+        self.action_client = ActionClient(
+            self, NavigateToPose, "/robot1/navigate_to_pose"
+        )
+
         dir = os.path.dirname(os.path.abspath(__file__))
         self.file_path = os.path.join(dir, "robot_poses.txt")
         self.file = None
@@ -140,22 +147,47 @@ class WaypointSrv(Node):
 
         pose = self.pose_dict[index]
 
-        goal_pose = PoseStamped()
-        goal_pose.header.frame_id = 'map'
-        goal_pose.header.stamp = self.get_clock().now().to_msg()
-        goal_pose.pose.position.x = float(pose[0])
-        goal_pose.pose.position.z = float(pose[2])
-        goal_pose.pose.position.y = float(pose[1])
-        goal_pose.pose.orientation.x = float(pose[3])
-        goal_pose.pose.orientation.y = float(pose[4])
-        goal_pose.pose.orientation.z = float(pose[5])
-        goal_pose.pose.orientation.w = float(pose[6])
+        goal_pose = NavigateToPose.Goal()
+        goal_pose.pose.header.frame_id = 'map'
+        goal_pose.pose.header.stamp = self.get_clock().now().to_msg()
+        goal_pose.pose.pose.position.x = float(pose[0])
+        goal_pose.pose.pose.position.z = float(pose[2])
+        goal_pose.pose.pose.position.y = float(pose[1])
+        goal_pose.pose.pose.orientation.x = float(pose[3])
+        goal_pose.pose.pose.orientation.y = float(pose[4])
+        goal_pose.pose.pose.orientation.z = float(pose[5])
+        goal_pose.pose.pose.orientation.w = float(pose[6])
 
-        self.pub.publish(goal_pose)
+        goal_future = self.action_client.send_goal_async(goal_pose)
+        goal_future.add_done_callback(self.goal_response)
 
         return True
 
 ############################################### Helper Functions ##################################################################################
+    
+    def goal_response(self, future):
+        goal_handle = future.result()
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self.goal_result)
+
+    def goal_result(self, future):
+        result = future.result().result
+        if result:
+            # Nav2 completed, can do predocking
+            client = self.create_client(Trigger, 'pre_docker')
+
+            while not client.wait_for_service(timeout_sec=1.0):
+                self.get_logger().info('Pre Docking Service not available, trying again...')
+            
+            client_request = Trigger.Request()
+            client_future = client.call_async(client_request)
+
+            rclpy.spin_until_future_complete(self, client_future)
+        
+        else:
+            self.get_logger().error("Nav2 failed to complete!")
+    
+    
     def good_index(self, index):
         if str(index) not in list(self.pose_dict.keys()):
             return False
