@@ -2,26 +2,15 @@ This package is used to set up a service-client communication that saves poses o
 
 ### Steps to Run Service and Client:
 
-1) Clone and enter the repository into your working directory:
+Once your workspace is built and sourced:
 
-   ```
-   git clone https://github.com/cmu-mfi/amr_mp400_ws.git
-   cd amr_mp400_ws
-   ```
-   
-3) Build the workspace and source install:
-
-   ```
-   colcon build --symlink-install
-   source install/setup.bash
-   ```
-4) From one terminal, run:
+1) From one terminal, run:
 
    ` ros2 run waypoint_maker waypoint_service `
 
    You should now see that the service is running in the terminal, as there should be no output or input from the terminal
 
-5) Opening another terminal source the install file again and run:
+2) Opening another terminal source the install file again and run:
 
    ` ros2 run waypoint_maker waypoint_client <f> <i> <d>`
 
