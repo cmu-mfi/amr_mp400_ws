@@ -180,6 +180,7 @@ class WaypointSrv(Node):
                 self.get_logger().info('Pre Docking Service not available, trying again...')
             
             client_request = Trigger.Request()
+            self.get_logger().info('Calling Pre-Docking')
             client_future = client.call_async(client_request)
 
             rclpy.spin_until_future_complete(self, client_future)

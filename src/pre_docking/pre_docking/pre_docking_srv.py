@@ -18,7 +18,7 @@ from scipy.spatial.transform import Rotation as R
 
 class PreDockingSrv(Node):
 
-    def __inti__(self):
+    def __init__(self):
 
         super().__init__('pre_docking_srv')
 
@@ -43,7 +43,7 @@ class PreDockingSrv(Node):
 
         self.marker_sub = self.create_subscription(
             MarkerArray,
-            '/robot1/marker_publisher/markers',
+            '/front_camera/marker_publisher/markers',
             self.marker_callback,
             10
         )
@@ -74,16 +74,19 @@ class PreDockingSrv(Node):
             self.get_logger().info(f"Marker id too high: {marker.id}")
             return
         
-        self.get_logger().info(f"Marker with id {marker.id} found!")
-
         self.marker: Marker = marker
     
     def docker_callback(self, request: Trigger.Request, response: Trigger.Response):
         
         if self.marker == None:
             self.get_logger().info("No marker found, cant do pre-docking")
+            response.message = "Failed to Find Marker"
+            response.success = False
+            return response
         
         marker = self.marker
+        
+        self.get_logger().info(f"Marker with id {marker.id} found!")
 
         try:
 
@@ -173,8 +176,8 @@ class PreDockingSrv(Node):
             self.get_logger().error("Nav2 failed to complete!")
     
     def send_client_request(self):
-        self.docking_offsets_client = self.create_client(Trigger, 'get_docking_offsets')
-        self.docking_client = self.create_client(Trigger, 'docking_with_markers')
+        self.docking_offsets_client = self.create_client(Trigger, '/robot1/get_docking_offsets')
+        self.docking_client = self.create_client(Trigger, '/robot1/docking_with_markers')
 
         while not self.docking_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Docking service not available, waiting again...')
@@ -195,9 +198,9 @@ class PreDockingSrv(Node):
 
 
 
-        rclpy.spin_until_future_complete(self, self.future)
+        rclpy.spin_until_future_complete(self, self.docking_future)
 
-        return self.future.result()
+        return self.docking_future.result()
 
 '''
     def fix_orientation(self, cmd):
