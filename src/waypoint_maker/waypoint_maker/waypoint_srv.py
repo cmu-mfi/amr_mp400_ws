@@ -39,6 +39,7 @@ class WaypointSrv(Node):
         self.file = None
 
         self.latest = None
+        self.docking = None
 
     def sub_callback(self, msg: PoseWithCovarianceStamped):
         self.latest = msg.pose.pose
@@ -49,11 +50,17 @@ class WaypointSrv(Node):
         # Flags for operations -> a - Add / o - overwrite / w - delete all and add new / d - delete / g - go
         flag = chr(request.flag)
         index = str(request.index)
+        dock = chr(request.docking)
         
         if not self.latest:
             response.success = False
             response.msg = "Couldn't get robot pose"
             return response
+        
+        if dock == 'd':
+            self.docking = True
+        else:
+            self.docking = False
 
         pose = self.create_pose_array(self.latest)
         with open(self.file_path, 'r') as file:
@@ -174,15 +181,18 @@ class WaypointSrv(Node):
         result = future.result().result
         if result:
             # Nav2 completed, can do predocking
-            client = self.create_client(Trigger, 'pre_docker')
+            if self.docking:
+                client = self.create_client(Trigger, 'pre_docker')
 
-            while not client.wait_for_service(timeout_sec=1.0):
-                self.get_logger().info('Pre Docking Service not available, trying again...')
-            
-            client_request = Trigger.Request()
-            client_future = client.call_async(client_request)
+                while not client.wait_for_service(timeout_sec=1.0):
+                    self.get_logger().info('Pre Docking Service not available, trying again...')
+                
+                client_request = Trigger.Request()
+                self.get_logger().info('Calling Pre-Docking')
+                client_future = client.call_async(client_request)
 
-            rclpy.spin_until_future_complete(self, client_future)
+                rclpy.spin_until_future_complete(self, client_future)
+            self.get_logger().error("Nav2 complete!")
         
         else:
             self.get_logger().error("Nav2 failed to complete!")
