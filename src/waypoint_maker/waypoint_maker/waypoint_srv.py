@@ -7,9 +7,8 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_srvs.srv import Trigger
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
-
-
 from amr_mp400_interfaces.srv import SetFlag
+
 
 class WaypointSrv(Node):
 

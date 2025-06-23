@@ -124,15 +124,19 @@ class PreDockingSrv(Node):
 
         # Calculate desired position: move forward along marker's forward vector
         # Dont think this makes too much sense but yeah :) (Might also just be = not +=)
+        # Might also just not need this as you can just turn where you saved the position -> Make sure to save position facing just ahaead of the marker
+        '''
         desired_position = point_pose.position
         desired_position.x += z_axis[0] * self.distance
         desired_position.y += z_axis[1] * self.distance
         desired_position.z = 0.0
+        '''
+
 
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose.header.frame_id = 'map'
         goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
-        goal_msg.pose.pose.position = desired_position
+        goal_msg.pose.pose.position = self.latest_pose.position
         goal_msg.pose.pose.orientation.x = quat_goal[1]  # transforms3d uses [w, x, y, z]
         goal_msg.pose.pose.orientation.y = quat_goal[2]
         goal_msg.pose.pose.orientation.z = quat_goal[3]
@@ -179,24 +183,22 @@ class PreDockingSrv(Node):
         self.docking_offsets_client = self.create_client(Trigger, '/robot1/get_docking_offsets')
         self.docking_client = self.create_client(Trigger, '/robot1/docking_with_markers')
 
-        while not self.docking_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Docking service not available, waiting again...')
-
         while not self.docking_offsets_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Offsets service not available, waiting again...')
-    
-        self.docking_request = Trigger.Request()
+        
         self.offsets_request = Trigger.Request()
-
         self.offsets_future = self.docking_offsets_client.call_async(self.offsets_request)
-        self.docking_future = self.docking_client.call_async(self.docking_request)
 
         rclpy.spin_until_future_complete(self, self.offsets_future) 
         if not self.offsets_future.result():
             self.get_logger().info("Failed to get marker offset")
             return self.offsets_future.result()
 
-
+        while not self.docking_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Docking service not available, waiting again...')
+    
+        self.docking_request = Trigger.Request()
+        self.docking_future = self.docking_client.call_async(self.docking_request)
 
         rclpy.spin_until_future_complete(self, self.docking_future)
 
