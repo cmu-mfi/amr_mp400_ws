@@ -23,7 +23,9 @@ This package is used to set up a service-client communication that saves poses o
 
 5) Opening another terminal source the install file again and run:
 
-   ` ros2 run waypoint_maker waypoint_client <f> <i> `, where f and i are the flags and index respectively
+   ` ros2 run waypoint_maker waypoint_client <f> <i> <d>`
+
+   where f, i, d are the flags, index, and docking respectively
 
 ### Flags and Indices: 
 **a** -> Append a pose to the file; Index doesnt matter for this operation but is still needed to be input
@@ -35,3 +37,9 @@ This package is used to set up a service-client communication that saves poses o
 **w** -> Delete all poses and add the current robot pose as the only pose in the file
 
 **g** -> Publish pose described at index i to the goal_pose topic
+
+### Docking Toggle:
+
+**d** -> Starts docking procedure after navigation completes
+
+**Note:** Anything in this option will not do anything except for the letter d, but is still needed for program to run
