@@ -22,6 +22,7 @@
   <depend>transforms3d</depend>
   <depend>tf2_geometry_msgs</depend>
   <depend>scipy</depend>
+  <depend>time</depend>
 
 
   <export>

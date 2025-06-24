@@ -2,6 +2,7 @@ import rclpy
 import rclpy.duration
 import numpy as np
 from rclpy.node import Node
+import time
 from std_srvs.srv import Trigger
 from aruco_msgs.msg import MarkerArray, Marker
 from nav2_msgs.action import NavigateToPose
@@ -64,7 +65,6 @@ class PreDockingSrv(Node):
 
     def front_marker_callback(self, markers: MarkerArray):
         if self.goal_sent:
-            self.front_marker = None
             return
 
         if len(markers.markers) == 0:
@@ -75,7 +75,6 @@ class PreDockingSrv(Node):
         # There should only be one marker in the array for a docking station
         if len(markers.markers) > 1:
             self.get_logger().info('More than one marker found, cant dock')
-            self.front_marker = None
             return
         
         
@@ -84,7 +83,6 @@ class PreDockingSrv(Node):
 
         if marker.id > 20:
             self.get_logger().info(f"Marker id too high: {marker.id}")
-            self.front_marker = None
             return
         
         self.front_marker = marker
@@ -125,13 +123,12 @@ class PreDockingSrv(Node):
                 return response
             
             # We know we see front and not back, so we can do the spin
-            success = self.turn_away(response)
+            success = self.turn_around()
             if not success:
                 response.success = False
                 response.message = 'Failed to Turn Around'
 
-                return response
-            
+                return response            
             
         # Back camera is detecting a marker
         success = self.send_offset_request()
@@ -151,14 +148,15 @@ class PreDockingSrv(Node):
     def docking_callback(self, request: Trigger.Request, response: Trigger.Response):
         # Robot should already be at nav2 position
         if self.back_marker == None:
-            success = self.turn_around(response)
+            success = self.turn_around()
             if not success:
                 response.success = False
                 response.message = 'Failed to Turn Around'
 
                 return response
-        
+
         # Robot should see marker from the back
+        self.get_logger().info('Sending Docking Request')
         success = self.send_docking_request()
         if not success:
             response.success = False
@@ -180,11 +178,10 @@ class PreDockingSrv(Node):
         self.offsets_request = Trigger.Request()
         self.offsets_future = self.docking_offsets_client.call_async(self.offsets_request)
 
-        rclpy.spin_until_future_complete(self, self.offsets_future) 
         return self.offsets_future.result()
 
 
-    def send_docking_request(self, future):
+    def send_docking_request(self):
         self.docking_client = self.create_client(Trigger, '/robot1/docking_with_markers')
 
         while not self.docking_client.wait_for_service(timeout_sec=1.0):
@@ -193,16 +190,13 @@ class PreDockingSrv(Node):
         self.docking_request = Trigger.Request()
         self.docking_future = self.docking_client.call_async(self.docking_request)
 
-        rclpy.spin_until_future_complete(self, self.docking_future)
         return self.docking_future.result()
     
 
-    def turn_away(self, response: Trigger.Response):
+    def turn_around(self):
         if self.front_marker == None:
             self.get_logger().info("No marker found, cant do pre-docking")
-            response.message = "Failed to Find Marker"
-            response.success = False
-            return response
+            return False
         
         marker = self.front_marker
         
@@ -218,14 +212,9 @@ class PreDockingSrv(Node):
         
         except Exception as e:
             self.get_logger().info(f"Transform error with {e}")
-            response.message = f"Transform Failure: {e}"
-            response.success = False
-            return response
+            return False
 
         marker_pose = marker.pose.pose
-        
-        # cmd = Twist()
-        # self.fix_orientation(cmd)
 
         # Need point pose in map frame
         point_pose = do_transform_pose(marker_pose, map_to_marker) 
@@ -238,18 +227,7 @@ class PreDockingSrv(Node):
 
         quat_goal = euler2quat(0, 0, yaw_goal)
 
-        # Calculate desired position: move forward along marker's forward vector
-        # Dont think this makes too much sense but yeah :) (Might also just be = not +=)
-        # Might also just not need this as you can just turn where you saved the position -> Make sure to save position facing just ahaead of the marker
-        '''
-        R = quat2mat(q_np)
-        z_axis = R[:3, 2]
-        desired_position = point_pose.position
-        desired_position.x += z_axis[0] * self.distance
-        desired_position.y += z_axis[1] * self.distance
-        desired_position.z = 0.0
-        '''
-
+        self.get_logger().info("Turning Around")
 
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose.header.frame_id = 'map'
@@ -264,13 +242,12 @@ class PreDockingSrv(Node):
         self.goal_sent = True
         self.sub = None
 
-        response.message = "Sent goal request to Nav2"
-        response.success = True
+        self.get_logger().info("Sent goal request to Nav2")
 
         goal_future = self.client.send_goal_async(goal_msg)
         goal_future.add_done_callback(self.goal_response)
         
-        return response
+        return True
 
 
     def goal_response(self, future):
@@ -312,82 +289,3 @@ def main(args=None):
 if __name__ == '__main__':
     main()
 
-
-
-'''
-# if self.front_marker == None:
-        #     self.get_logger().info("No marker found, cant do pre-docking")
-        #     response.message = "Failed to Find Marker"
-        #     response.success = False
-        #     return response
-        
-        marker = self.marker
-        
-        self.get_logger().info(f"Marker with id {marker.id} found!")
-
-        try:
-
-            map_to_marker = self.tf_buffer.lookup_transform(
-                'map',
-                marker.header.frame_id,
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.5)
-            )
-        
-        except Exception as e:
-            self.get_logger().info(f"Transform error with {e}")
-            response.message = f"Transform Failure: {e}"
-            response.success = False
-            return response
-
-        marker_pose = marker.pose.pose
-        
-        # cmd = Twist()
-        # self.fix_orientation(cmd)
-
-        # Need point pose in map frame
-        point_pose = do_transform_pose(marker_pose, map_to_marker) 
-
-        q = point_pose.orientation
-        q_np = [q.w, q.x, q.y, q.z]
-
-        _, _, yaw_marker = quat2euler(q_np)
-        yaw_goal = yaw_marker + np.pi
-
-        quat_goal = euler2quat(0, 0, yaw_goal)
-
-        R = quat2mat(q_np)
-        z_axis = R[:3, 2]
-
-        # Calculate desired position: move forward along marker's forward vector
-        # Dont think this makes too much sense but yeah :) (Might also just be = not +=)
-        # Might also just not need this as you can just turn where you saved the position -> Make sure to save position facing just ahaead of the marker
-        
-        desired_position = point_pose.position
-        desired_position.x += z_axis[0] * self.distance
-        desired_position.y += z_axis[1] * self.distance
-        desired_position.z = 0.0
-        
-
-
-        goal_msg = NavigateToPose.Goal()
-        goal_msg.pose.header.frame_id = 'map'
-        goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
-        goal_msg.pose.pose.position = self.latest_pose.position
-        goal_msg.pose.pose.orientation.x = quat_goal[1]  # transforms3d uses [w, x, y, z]
-        goal_msg.pose.pose.orientation.y = quat_goal[2]
-        goal_msg.pose.pose.orientation.z = quat_goal[3]
-        goal_msg.pose.pose.orientation.w = quat_goal[0]
-
-        self.get_logger().info('Sent goal pose to nav2')
-        self.goal_sent = True
-        self.sub = None
-
-        response.message = "Sent goal request to Nav2"
-        response.success = True
-
-        goal_future = self.client.send_goal_async(goal_msg)
-        goal_future.add_done_callback(self.goal_response)
-        
-        return response
-'''
