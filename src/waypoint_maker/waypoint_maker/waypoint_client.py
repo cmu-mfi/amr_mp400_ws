@@ -15,9 +15,10 @@ class WaypointClientAsync(Node):
         
         self.request = SetFlag.Request()
     
-    def send_request(self, flag, index):
+    def send_request(self, flag, index, docking):
         self.request.flag = flag
         self.request.index = index
+        self.request.docking = docking
 
         self.future = self.client.call_async(self.request)
         rclpy.spin_until_future_complete(self, self.future)
@@ -30,7 +31,7 @@ def main(args=None):
 
     waypoint_client = WaypointClientAsync()
 
-    response = waypoint_client.send_request(ord(sys.argv[1]), int(sys.argv[2]))
+    response = waypoint_client.send_request(ord(sys.argv[1]), int(sys.argv[2]), ord(sys.argv[3]))
 
     waypoint_client.get_logger().info(
         'Success: %d \nReturn Message: %s' % (response.success, response.msg)
