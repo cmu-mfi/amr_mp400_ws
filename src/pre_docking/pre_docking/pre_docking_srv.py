@@ -94,12 +94,12 @@ class PreDockingSrv(Node):
             self.back_marker = None
             return
         
-        if len(markers.markers == 0):
+        if len(markers.markers) == 0:
             self.get_logger().info("Back Camera sees no markers")
             self.back_marker = None
             return
         
-        if len(markers.markers > 1):
+        if len(markers.markers) > 1:
             self.get_logger().info("Back Camera sees more than one marker")
             self.back_marker = None
             return
@@ -125,7 +125,7 @@ class PreDockingSrv(Node):
                 return response
             
             # We know we see front and not back, so we can do the spin
-            success = self.turn_away()
+            success = self.turn_away(response)
             if not success:
                 response.success = False
                 response.message = 'Failed to Turn Around'
@@ -142,6 +142,7 @@ class PreDockingSrv(Node):
             return response
         
         # Success
+        self.get_logger().info("Succesfully got Offsets")
         response.success = True
         response.message = 'Saved Marker Offset'
 
@@ -164,12 +165,13 @@ class PreDockingSrv(Node):
             response.message = 'Docking Failed'
             return response
         
+        self.get_logger().info("Succesfully got Offsets")
         response.success = True
         response.message = 'Docking Success'
 
         return response
 
-    def send_offsets_request(self):
+    def send_offset_request(self):
         self.docking_offsets_client = self.create_client(Trigger, '/robot1/get_docking_offsets')
 
         while not self.docking_offsets_client.wait_for_service(timeout_sec=1.0):
@@ -195,7 +197,7 @@ class PreDockingSrv(Node):
         return self.docking_future.result()
     
 
-    def turn_around(self, response: Trigger.Response):
+    def turn_away(self, response: Trigger.Response):
         if self.front_marker == None:
             self.get_logger().info("No marker found, cant do pre-docking")
             response.message = "Failed to Find Marker"

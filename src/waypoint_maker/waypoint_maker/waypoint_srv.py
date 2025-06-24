@@ -73,20 +73,7 @@ class WaypointSrv(Node):
                 pass
 
             case "a":
-                # Add marker offset if it is a docking append
-                if self.docking:
-                    client = self.create_client(Trigger, 'pre_docking_offset')
 
-                    while not client.wait_for_service(timeout_sec=1.0):
-                        self.get_logger().info('Pre Docking Offset Service not available, trying again...')
-                
-                    client_request = Trigger.Request()
-                    self.get_logger().info('Calling Pre-Docking Offset')
-                    client_future = client.call_async(client_request)
-
-                    rclpy.spin_until_future_complete(self, client_future)
-
-                
                 # Dont need index to add, need robot pose
                 response.success = self.append_write(pose)
                 response.msg = "Wrote Robot Pose!"
@@ -135,8 +122,24 @@ class WaypointSrv(Node):
         return response 
     
     def append_write(self, pose, ind=None):
+
+        if self.docking:
+            client = self.create_client(Trigger, 'pre_docker_offset')
+
+            while not client.wait_for_service(timeout_sec=1.0):
+                self.get_logger().info('Pre Docking Offset Service not available, trying again...')
+        
+            client_request = Trigger.Request()
+            self.get_logger().info('Calling Pre-Docking Offset')
+            client_future = client.call_async(client_request)
+            client_future.add_done_callback(self.pre_docker_response)
+
+            rclpy.spin_until_future_complete(self, client_future)
+
+        self.get_logger().info(f'Ind = {ind}')
         if ind == None:
             ind = len(self.pose_dict.keys())
+        self.get_logger().info(f'Ind = {ind}')
         self.pose_dict[ind] = pose
         return True
     
@@ -203,13 +206,24 @@ class WaypointSrv(Node):
                 client_request = Trigger.Request()
                 self.get_logger().info('Calling Pre-Docking Docking')
                 client_future = client.call_async(client_request)
+                client_future.add_done_callback(self.pre_docker_response)
 
-                rclpy.spin_until_future_complete(self, client_future)
             self.get_logger().error("Nav2 complete!")
         
         else:
             self.get_logger().error("Nav2 failed to complete!")
     
+    def pre_docker_response(self, future):
+        future_handle = future.result
+        result_future = future_handle.get_result_async()
+        result_future.add_done_callback(self.pre_docker_result)
+    
+    def pre_docker_result(self, future):
+        result = future.result().result
+        if result:
+            self.get_logger().info('Pre Docking Complete')
+        else:
+            self.get_logger().info("Pre Docker Error, Couldn't Complete")
     
     def good_index(self, index):
         if str(index) not in list(self.pose_dict.keys()):
