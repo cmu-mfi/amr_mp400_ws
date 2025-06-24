@@ -73,6 +73,20 @@ class WaypointSrv(Node):
                 pass
 
             case "a":
+                # Add marker offset if it is a docking append
+                if self.docking:
+                    client = self.create_client(Trigger, 'pre_docking_offset')
+
+                    while not client.wait_for_service(timeout_sec=1.0):
+                        self.get_logger().info('Pre Docking Offset Service not available, trying again...')
+                
+                    client_request = Trigger.Request()
+                    self.get_logger().info('Calling Pre-Docking Offset')
+                    client_future = client.call_async(client_request)
+
+                    rclpy.spin_until_future_complete(self, client_future)
+
+                
                 # Dont need index to add, need robot pose
                 response.success = self.append_write(pose)
                 response.msg = "Wrote Robot Pose!"
@@ -120,23 +134,21 @@ class WaypointSrv(Node):
             file.write(dict_str)
         return response 
     
-    def append_write(self, pose):
-        ind = len(self.pose_dict.keys())
+    def append_write(self, pose, ind=None):
+        if ind == None:
+            ind = len(self.pose_dict.keys())
         self.pose_dict[ind] = pose
         return True
     
     def overwrite_all(self, pose):
         self.pose_dict.clear()
-        self.pose_dict[0] = pose
-        return True
+        return self.append_write(pose)
 
     def overwrite_waypoint(self, index, pose):
         if not self.good_index(index):
             return False
         
-        self.pose_dict[index] = pose
-
-        return True
+        return self.append_write(pose, ind=index)
 
     def delete_waypoint(self, index):
         if not self.good_index(index):
@@ -144,6 +156,8 @@ class WaypointSrv(Node):
 
         print(self.pose_dict)
         del self.pose_dict[index]
+
+        # self.restructure() # Makes indices of pose_dict make sense
         return True
 
     def publish_waypoint(self, index):
@@ -181,13 +195,13 @@ class WaypointSrv(Node):
         if result:
             # Nav2 completed, can do predocking
             if self.docking:
-                client = self.create_client(Trigger, 'pre_docker')
+                client = self.create_client(Trigger, 'pre_docker_docking')
 
                 while not client.wait_for_service(timeout_sec=1.0):
-                    self.get_logger().info('Pre Docking Service not available, trying again...')
+                    self.get_logger().info('Pre Docking Docking Service not available, trying again...')
                 
                 client_request = Trigger.Request()
-                self.get_logger().info('Calling Pre-Docking')
+                self.get_logger().info('Calling Pre-Docking Docking')
                 client_future = client.call_async(client_request)
 
                 rclpy.spin_until_future_complete(self, client_future)
@@ -215,7 +229,7 @@ class WaypointSrv(Node):
     
     def create_pose_array(self, pose):
         pose_array = [pose.position.x, pose.position.y, pose.position.z, 
-                                pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
+                      pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
         return pose_array
 
 ####################################################### End Helpers ##################################################################################
