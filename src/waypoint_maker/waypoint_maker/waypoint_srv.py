@@ -44,8 +44,6 @@ class WaypointSrv(Node):
         self.latest = msg.pose.pose
 
     def waypoint_callback(self, request, response):
-        # What do we need to do here? 
-        # - Add a marker for docking stations TODO
         # Flags for operations -> a - Add / o - overwrite / w - delete all and add new / d - delete / g - go
         flag = chr(request.flag)
         index = str(request.index)
@@ -132,9 +130,6 @@ class WaypointSrv(Node):
             client_request = Trigger.Request()
             self.get_logger().info('Calling Pre-Docking Offset')
             client_future = client.call_async(client_request)
-            client_future.add_done_callback(self.pre_docker_response)
-
-            rclpy.spin_until_future_complete(self, client_future)
 
         self.get_logger().info(f'Ind = {ind}')
         if ind == None:
@@ -206,7 +201,6 @@ class WaypointSrv(Node):
                 client_request = Trigger.Request()
                 self.get_logger().info('Calling Pre-Docking Docking')
                 client_future = client.call_async(client_request)
-                client_future.add_done_callback(self.pre_docker_response)
 
             self.get_logger().error("Nav2 complete!")
         
