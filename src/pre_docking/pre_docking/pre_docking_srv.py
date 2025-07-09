@@ -39,32 +39,33 @@ class PreDockingSrv(Node):
         self.pose_sub = self.create_subscription(
             PoseWithCovarianceStamped,
             '/robot1/map_pose',
-            self.pose_callback,
+            self._pose_callback,
             10
         )
 
         self.front_marker_sub = self.create_subscription(
             MarkerArray,
             '/front_camera/marker_publisher/markers',
-            self.front_marker_callback,
+            self._front_marker_callback,
             10
         )
 
         self.back_marker_sub = self.create_subscription(
             MarkerArray,
             "/robot1/marker_publisher/markers",
-            self.back_marker_callback,
+            self._back_marker_callback,
             10
         )
 
         self.offset_srv = self.create_service(Trigger, 'pre_docker_offset', self.offset_callback)
         self.docking_srv = self.create_service(Trigger, 'pre_docker_docking', self.docking_callback)
 
-    def pose_callback(self, msg: PoseWithCovarianceStamped):
+    def _pose_callback(self, msg: PoseWithCovarianceStamped):
         self.latest_pose = msg.pose.pose
 
-    def front_marker_callback(self, markers: MarkerArray):
+    def _front_marker_callback(self, markers: MarkerArray):
         if self.goal_sent:
+            self.front_marker = None
             return
 
         if len(markers.markers) == 0:
@@ -75,6 +76,7 @@ class PreDockingSrv(Node):
         # There should only be one marker in the array for a docking station
         if len(markers.markers) > 1:
             self.get_logger().info('More than one marker found, cant dock')
+            self.front_marker = None
             return
         
         
@@ -83,11 +85,12 @@ class PreDockingSrv(Node):
 
         if marker.id > 20:
             self.get_logger().info(f"Marker id too high: {marker.id}")
+            self.front_marker = None
             return
         
         self.front_marker = marker
     
-    def back_marker_callback(self, markers: MarkerArray):
+    def _back_marker_callback(self, markers: MarkerArray):
         if self.goal_sent:
             self.back_marker = None
             return
@@ -113,9 +116,12 @@ class PreDockingSrv(Node):
 
 
     def offset_callback(self, request: Trigger.Request, response: Trigger.Response):
-        
+        self.get_logger().info("OFFSET CALLBACK METHOD CALLED")
+
         if self.back_marker == None:
+            self.get_logger().info("NO BACK MARKER FOUND")
             if self.front_marker == None:
+                self.get_logger().info("NO FRONT MARKER FOUND ALSO")
                 self.get_logger().info('No marker found, cant dock')
                 response.success = False
                 response.message = 'No markers'
@@ -123,7 +129,8 @@ class PreDockingSrv(Node):
                 return response
             
             # We know we see front and not back, so we can do the spin
-            success = self.turn_around()
+            self.get_logger().info("FRONT MARKER FOUND")
+            success = self.__turn_around()
             if not success:
                 response.success = False
                 response.message = 'Failed to Turn Around'
@@ -131,7 +138,8 @@ class PreDockingSrv(Node):
                 return response            
             
         # Back camera is detecting a marker
-        success = self.send_offset_request()
+        self.get_logger().info("BACK MARKER FOUND")
+        success = self.__send_offset_request()
         if not success:
             response.success = False
             response.message = 'Failed to Save Marker Offset'
@@ -148,7 +156,15 @@ class PreDockingSrv(Node):
     def docking_callback(self, request: Trigger.Request, response: Trigger.Response):
         # Robot should already be at nav2 position
         if self.back_marker == None:
-            success = self.turn_around()
+            self.get_logger().info("NO BACK MARKER FOUND")
+            if self.front_marker == None:
+                self.get_logger().info("NO FRONT MARKER FOUND")
+                response.success = False
+                response.message = 'No markers found for docking'
+                return response
+            
+            self.get_logger().info("FRONT MARKER FOUND")
+            success = self.__turn_around()
             if not success:
                 response.success = False
                 response.message = 'Failed to Turn Around'
@@ -156,8 +172,9 @@ class PreDockingSrv(Node):
                 return response
 
         # Robot should see marker from the back
+        self.get_logger().info("BACK MARKER FOUND")
         self.get_logger().info('Sending Docking Request')
-        success = self.send_docking_request()
+        success = self.__send_docking_request()
         if not success:
             response.success = False
             response.message = 'Docking Failed'
@@ -169,7 +186,7 @@ class PreDockingSrv(Node):
 
         return response
 
-    def send_offset_request(self):
+    def __send_offset_request(self):
         self.docking_offsets_client = self.create_client(Trigger, '/robot1/get_docking_offsets')
 
         while not self.docking_offsets_client.wait_for_service(timeout_sec=1.0):
@@ -178,22 +195,23 @@ class PreDockingSrv(Node):
         self.offsets_request = Trigger.Request()
         self.offsets_future = self.docking_offsets_client.call_async(self.offsets_request)
 
-        return self.offsets_future.result()
+        return True
 
 
-    def send_docking_request(self):
+    def __send_docking_request(self):
         self.docking_client = self.create_client(Trigger, '/robot1/docking_with_markers')
 
         while not self.docking_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Docking service not available, waiting again...')
     
         self.docking_request = Trigger.Request()
-        self.docking_future = self.docking_client.call_async(self.docking_request)
+        self.docking_client.call_async(self.docking_request)
 
-        return self.docking_future.result()
+        return True
     
 
-    def turn_around(self):
+    def __turn_around(self):
+        self.get_logger().info("TURN AROUND REQUEST RECEIVED")
         if self.front_marker == None:
             self.get_logger().info("No marker found, cant do pre-docking")
             return False
@@ -245,12 +263,12 @@ class PreDockingSrv(Node):
         self.get_logger().info("Sent goal request to Nav2")
 
         goal_future = self.client.send_goal_async(goal_msg)
-        goal_future.add_done_callback(self.goal_response)
+        goal_future.add_done_callback(self.__goal_response)
         
         return True
 
 
-    def goal_response(self, future):
+    def __goal_response(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().info('Goal Rejected')
@@ -258,19 +276,12 @@ class PreDockingSrv(Node):
     
         self.get_logger().info('Goal accepted, waiting for result')
         result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.goal_result)
+        result_future.add_done_callback(self.__goal_result)
 
-    def goal_result(self, future):
+    def __goal_result(self, future):
         result = future.result().result
         if result:
             self.get_logger().info(f"Nav2 completed")
-            # Need to send trigger to the other interns code and do the backup
-            success = self.send_docking_request()
-            if not success:
-                self.get_logger().info('Docking Failed')
-            else:
-                self.get_logger().info('Docking Completed')
-
         else:
             self.get_logger().error("Nav2 failed to complete!")
     

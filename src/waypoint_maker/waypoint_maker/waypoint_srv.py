@@ -108,6 +108,11 @@ class WaypointSrv(Node):
                 else:
                     response.msg = "Waypoint couldnt be published, give a good index"
 
+            case "s":
+                self.get_logger().info("Saving marker pose")
+                self.save_marker_pose()
+                response.success = True
+                response.msg = 'Saved Marker Pose'
 
             case _:
                 self.get_logger().info("Bad Flag Given: Try 'h' for help, or one of ['a', 'o', 'w', 'd', 'g'] for functionality")
@@ -119,8 +124,8 @@ class WaypointSrv(Node):
             file.write(dict_str)
         return response 
     
-    def append_write(self, pose, ind=None):
 
+    def save_marker_pose(self):
         if self.docking:
             client = self.create_client(Trigger, 'pre_docker_offset')
 
@@ -131,6 +136,7 @@ class WaypointSrv(Node):
             self.get_logger().info('Calling Pre-Docking Offset')
             client_future = client.call_async(client_request)
 
+    def append_write(self, pose, ind=None):
         self.get_logger().info(f'Ind = {ind}')
         if ind == None:
             ind = len(self.pose_dict.keys())
