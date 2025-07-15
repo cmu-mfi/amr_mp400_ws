@@ -8,7 +8,7 @@ from std_srvs.srv import Trigger
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
 from amr_mp400_interfaces.srv import SetFlag
-
+from std_msgs.msg import Int32
 
 class WaypointSrv(Node):
 
@@ -29,6 +29,15 @@ class WaypointSrv(Node):
             qos_profile=subscriber_qos
         )
 
+        self.timer_period = 0.1
+
+        self.pub = self.create_publisher(
+            Int32, 
+            '/waypoint_amount', 
+            10
+        )
+
+        self.timer = self.create_timer(self.timer_period, self.publish_dict)
         self.action_client = ActionClient(
             self, NavigateToPose, "/robot1/navigate_to_pose"
         )
@@ -161,7 +170,7 @@ class WaypointSrv(Node):
         print(self.pose_dict)
         del self.pose_dict[index]
 
-        # self.restructure() # Makes indices of pose_dict make sense
+        self.restructure() # Makes indices of pose_dict make sense
         return True
 
     def publish_waypoint(self, index):
@@ -186,6 +195,12 @@ class WaypointSrv(Node):
         goal_future.add_done_callback(self.goal_response)
 
         return True
+    
+    def publish_amount(self):
+        # This function is used to publish the amount of waypoints in the dict
+        msg = Int32()
+        msg.data = len(self.pose_dict.keys())
+        self.pub.publish(msg)
 
 ############################################### Helper Functions ##################################################################################
     
@@ -245,6 +260,14 @@ class WaypointSrv(Node):
         pose_array = [pose.position.x, pose.position.y, pose.position.z, 
                       pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
         return pose_array
+    
+    def restructure(self):
+        # This function is used to make sure that the indices of the pose_dict are sequential
+        # for safety
+        new_dict = {}
+        for i, key in enumerate(sorted(self.pose_dict.keys(), key=int)):
+            new_dict[str(i)] = self.pose_dict[key]
+        self.pose_dict = new_dict
 
 ####################################################### End Helpers ##################################################################################
 
