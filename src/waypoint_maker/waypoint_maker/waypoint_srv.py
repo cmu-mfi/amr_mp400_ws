@@ -37,7 +37,7 @@ class WaypointSrv(Node):
             10
         )
 
-        self.timer = self.create_timer(self.timer_period, self.publish_dict)
+        self.timer = self.create_timer(self.timer_period, self.publish_amount)
         self.action_client = ActionClient(
             self, NavigateToPose, "/robot1/navigate_to_pose"
         )
@@ -198,8 +198,11 @@ class WaypointSrv(Node):
     
     def publish_amount(self):
         # This function is used to publish the amount of waypoints in the dict
+        with open(self.file_path, 'r') as file:
+            pose_dict = self.create_pose_dict(file)
+        
         msg = Int32()
-        msg.data = len(self.pose_dict.keys())
+        msg.data = len(pose_dict.keys())
         self.pub.publish(msg)
 
 ############################################### Helper Functions ##################################################################################

@@ -1,65 +1,88 @@
+#!/usr/bin/env python3
 import sys
-from std_msgs.msg import Int32
-from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Int32
 
-class SubscriberNode(Node):
+class ROS2Node(Node):
     def __init__(self):
-        super().__init__('subscriber_node')
+        super().__init__('qt_gui_node')
         self.subscription = self.create_subscription(
             Int32,
             '/waypoint_amount',
             self.listener_callback,
-            10
-        )
+            10)
         self.subscription  # prevent unused variable warning
-        self.msg_count = 0
+        self.latest_message = "No message yet"
 
     def listener_callback(self, msg):
-        print(f'Received: {msg.data}')
-        self.msg_count = msg.data
-class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, node):
+        self.latest_message = str(msg.data)
+        self.get_logger().info(f'I heard: "{msg.data}"')
+
+
+
+class MainWindow(QMainWindow):
+    def __init__(self, ros_node):
         super().__init__()
-        self.node = node
-        self.setWindowTitle('ROS Subscriber Test')
+        self.ros_node = ros_node
+        
+        self.setWindowTitle("ROS 2 Qt GUI")
         self.setGeometry(100, 100, 400, 300)
-        self.label = QtWidgets.QLabel('Waiting for messages...', self)
-        self.label.setAlignment(QtCore.Qt.AlignCenter)
-        self.setCentralWidget(self.label)
+        
+        # Create central widget and layout
+        central_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Add widgets
+        self.label = QLabel("ROS 2 Messages will appear here")
+        
+        layout.addWidget(self.label)
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
+        
+        # Timer to update GUI with ROS messages
+        self.timer = self.startTimer(100)  # Update every 100ms
 
-        self.timer = self.startTimer(100)
 
+    def timerEvent(self, event):
+        # Update GUI with latest ROS message
+        self.label.setText(f"Latest ROS message: {self.ros_node.latest_message}")
 
-    def update_label(self):
-        self.label.setText(str(self.node.msg_count))
-
-def main(args=None):
-    rclpy.init(args=args)
+def main():
+    # Initialize ROS 2
+    rclpy.init()
+    
+    # Create ROS 2 node
+    ros_node = ROS2Node()
+    
+    # Create Qt application
     app = QApplication(sys.argv)
-
-    sub = SubscriberNode()
-    window = MainWindow(sub)
+    
+    # Create and show main window
+    window = MainWindow(ros_node)
     window.show()
-
+    
+    # Use a single executor for both Qt and ROS 2
     executor = rclpy.executors.SingleThreadedExecutor()
-    executor.add_node(sub)
-
-    while rclpy.ok():
-        window.update_label()
-        executor.spin_once(timeout_sec=0.1)
-
+    executor.add_node(ros_node)
+    
+    # Main loop
+    while True:
+        # Process Qt events
+        app.processEvents()
+        
+        # Process ROS 2 events with timeout
+        executor.spin_once(timeout_sec=0.01)
+        
+        # Exit if window is closed
         if not window.isVisible():
             break
-
-    sub.destroy_node()
+    
+    # Cleanup
+    ros_node.destroy_node()
     rclpy.shutdown()
     sys.exit()
 
 if __name__ == '__main__':
     main()
-
-
-
