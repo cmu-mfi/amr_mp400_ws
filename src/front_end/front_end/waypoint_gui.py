@@ -1,4 +1,4 @@
-from classes.GUI_class import DockingGUI
+from classes.GUI_class import RobotControlApp  # Renamed from DockingGUI
 import rclpy
 from PySide6.QtWidgets import QApplication
 
@@ -7,7 +7,7 @@ def main():
     ros_node = rclpy.create_node('robot_control_gui')
     
     app = QApplication([])
-    gui = DockingGUI(ros_node)
+    gui = RobotControlApp(ros_node)
     
     # ROS executor in a separate thread
     executor = rclpy.executors.SingleThreadedExecutor()
