@@ -6,8 +6,8 @@ from std_msgs.msg import Bool
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from std_srvs.srv import Trigger
-from front_end.classes.Camera_class import CameraView
-from front_end.classes.Button_class import WaypointButton
+from classes.Camera_class import CameraView
+from classes.Button_class import WaypointButton
 
 
 class DockingGUI(QWidget):

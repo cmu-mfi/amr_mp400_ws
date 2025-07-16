@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'sub_test = front_end.sub_test:main'
+            'gui_test = front_end.waypoint_gui:main'
         ],
     },
 )

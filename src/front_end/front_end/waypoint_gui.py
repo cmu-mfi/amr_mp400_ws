@@ -1,4 +1,4 @@
-from front_end.classes.GUI_class import DockingGUI
+from classes.GUI_class import DockingGUI
 import rclpy
 from PySide6.QtWidgets import QApplication
 
