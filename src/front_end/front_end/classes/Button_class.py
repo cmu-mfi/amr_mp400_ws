@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush
 from std_msgs.msg import Int32
-from std_srvs.srv import Trigger
+from waypoint_maker.waypoint_maker.waypoint_client import WaypointClientAsync
 
 
 class WaypointButton(QWidget):
@@ -26,18 +26,18 @@ class WaypointButton(QWidget):
         # Section definitions (different when active/inactive)
         self.active_sections = [
             {"name": "Go", "rect": QRect(0, 0, width//3, height), 
-             "color": QColor(144, 238, 144), "action": "go"},
+             "color": QColor(144, 238, 144), "action": "g"},
             {"name": "Overwrite", "rect": QRect(width//3, 0, width//3, height), 
-             "color": QColor(255, 255, 153), "action": "overwrite"},
+             "color": QColor(255, 255, 153), "action": "o"},
             {"name": "Delete", "rect": QRect(2*width//3, 0, width//3, height), 
-             "color": QColor(255, 182, 193), "action": "delete"}
+             "color": QColor(255, 182, 193), "action": "d"}
         ]
         
         self.inactive_section = {
             "name": "Append", 
             "rect": QRect(0, 0, width, height), 
             "color": QColor(173, 216, 230), 
-            "action": "append"
+            "action": "a"
         }
         
         self.hovered_action = None
@@ -99,24 +99,21 @@ class WaypointButton(QWidget):
         if not self.hovered_action:
             return
             
-        service_name = f"/waypoint_{self.hovered_action}"
-        self.call_ros_service(service_name, self.btn_id, self.name)
+        client = WaypointClientAsync()
+        self.call_ros_service(client)
     
-    def call_ros_service(self, service_name, waypoint_id, waypoint_name):
-        client = self.ros_node.create_client(Trigger, service_name)
+    def call_ros_service(self, client: WaypointClientAsync):
         
-        if not client.wait_for_service(timeout_sec=1.0):
-            self.ros_node.get_logger().warn(f"Service {service_name} not available")
-            return
-            
-        req = Trigger.Request()
+        future = client.send_request(
+            flag=ord(self.hovered_action),
+            index=self.btn_id,
+            docking=0  # Assuming docking is not used here, set to 0
+        )
         # Add your custom request fields here
         # req.waypoint_id = waypoint_id
         # req.waypoint_name = waypoint_name
         
-        future = client.call_async(req)
         future.add_done_callback(
             lambda future: self.ros_node.get_logger().info(
-                f"Called {service_name} for waypoint {waypoint_id} ({waypoint_name})"
-            )
+                f"Called for waypoint {self.btn_id} with action {self.hovered_action}. ")
         )

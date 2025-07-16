@@ -5,9 +5,9 @@ from PySide6.QtGui import QImage
 from std_msgs.msg import Bool
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-from std_srvs.srv import Trigger
 from classes.Camera_class import CameraView
 from classes.Button_class import WaypointButton
+from waypoint_maker.waypoint_maker.waypoint_client import WaypointClientAsync
 
 
 class DockingGUI(QWidget):
@@ -80,9 +80,6 @@ class DockingGUI(QWidget):
         self.setup_escape_controls()
         
         # ROS subscriptions
-        self.docking_state_sub = self.ros_node.create_subscription(
-            Bool, '/docking_mode', self.docking_state_callback, 10)
-        
         self.front_cam_sub = self.ros_node.create_subscription(
             Image, '/front_camera/marker_publisher/result', self.front_cam_callback, 10)
             
@@ -134,18 +131,14 @@ class DockingGUI(QWidget):
     
     def toggle_docking_mode(self, checked):
         state = "ON" if checked else "OFF"
+        if state == "ON":
+            self.dock = 'd'
+        else:
+            self.dock = 'n'
         self.docking_toggle.setText(f"Docking Mode: {state}")
-        self.call_ros_service("/set_docking_mode", checked)
     
     def save_docking_position(self):
-        self.call_ros_service("/save_docking_position")
-    
-    def docking_state_callback(self, msg):
-        self.docking_toggle.blockSignals(True)
-        self.docking_toggle.setChecked(msg.data)
-        state = "ON" if msg.data else "OFF"
-        self.docking_toggle.setText(f"Docking Mode: {state}")
-        self.docking_toggle.blockSignals(False)
+        self.call_ros_service("s")
     
     def front_cam_callback(self, msg):
         try:
@@ -172,15 +165,15 @@ class DockingGUI(QWidget):
             self.ros_node.get_logger().error(f"Rear cam error: {str(e)}")
     
     def call_ros_service(self, service_name, *args):
-        client = self.ros_node.create_client(Trigger, service_name)
+        client = WaypointClientAsync()
         
-        if not client.wait_for_service(timeout_sec=1.0):
-            self.ros_node.get_logger().warn(f"Service {service_name} not available")
-            return
-            
-        req = Trigger.Request()
+        future = client.send_request(
+            flag=ord(service_name[0]),  # Assuming service_name is a single character
+            index=0,
+            docking=self.dock
+        )
+
         # Add your custom request fields here if needed
-        future = client.call_async(req)
         future.add_done_callback(
             lambda future: self.ros_node.get_logger().info(
                 f"Service {service_name} call {'succeeded' if future.result().success else 'failed'}"
