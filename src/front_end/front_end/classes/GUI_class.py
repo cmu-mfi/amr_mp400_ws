@@ -1,3 +1,4 @@
+from urllib import response
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
                               QPushButton, QMenu)
 from PySide6.QtCore import Qt, QTimer
@@ -7,7 +8,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from classes.Camera_class import CameraView
 from classes.Button_class import WaypointButton
-from waypoint_maker.waypoint_maker.waypoint_client import WaypointClientAsync
+from waypoint_maker.waypoint_client import WaypointClientAsync
 
 
 class DockingGUI(QWidget):
@@ -28,6 +29,7 @@ class DockingGUI(QWidget):
         self.back_cam_view = CameraView("Rear Camera")
         self.camera_panel.addWidget(self.front_cam_view)
         self.camera_panel.addWidget(self.back_cam_view)
+        self.dock = 'n'
         
         # Right panel - Controls
         self.control_panel = QVBoxLayout()
@@ -170,15 +172,14 @@ class DockingGUI(QWidget):
         future = client.send_request(
             flag=ord(service_name[0]),  # Assuming service_name is a single character
             index=0,
-            docking=self.dock
+            docking=ord(self.dock)
         )
 
         # Add your custom request fields here if needed
-        future.add_done_callback(
-            lambda future: self.ros_node.get_logger().info(
-                f"Service {service_name} call {'succeeded' if future.result().success else 'failed'}"
-            )
-        )
+        if not future.success:
+            print(f'Action {service_name[0]} failed with response {future.msg}')
+        else:
+            print(f'Action {service_name[0]} succeded with response {future.msg}')
     
     def update_views(self):
         self.front_cam_view.update()

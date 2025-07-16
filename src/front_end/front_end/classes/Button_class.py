@@ -2,7 +2,9 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush
 from std_msgs.msg import Int32
-from waypoint_maker.waypoint_maker.waypoint_client import WaypointClientAsync
+from waypoint_maker.waypoint_client import WaypointClientAsync
+
+
 
 
 class WaypointButton(QWidget):
@@ -109,11 +111,8 @@ class WaypointButton(QWidget):
             index=self.btn_id,
             docking=0  # Assuming docking is not used here, set to 0
         )
-        # Add your custom request fields here
-        # req.waypoint_id = waypoint_id
-        # req.waypoint_name = waypoint_name
         
-        future.add_done_callback(
-            lambda future: self.ros_node.get_logger().info(
-                f"Called for waypoint {self.btn_id} with action {self.hovered_action}. ")
-        )
+        if not future.success:
+            print(f'Action {self.hovered_action} failed with response {future.msg}')
+        else:
+            print(f'Action {self.hovered_action} succeded with response {future.msg}')
