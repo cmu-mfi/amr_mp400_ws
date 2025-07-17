@@ -1,15 +1,13 @@
-from urllib import response
-from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout, QHBoxLayout, 
-                              QPushButton, QMenu, QStackedWidget)
-from PySide6.QtCore import Qt, QTimer, Signal
+import subprocess, os
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
+                              QPushButton, QMenu, QLabel, QLineEdit)
+from PySide6.QtCore import Qt, QTimer, Signal, QProcess, QProcessEnvironment
 from PySide6.QtGui import QImage
-from std_msgs.msg import Bool
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from classes.Camera_class import CameraView
 from classes.Button_class import WaypointButton
 from waypoint_maker.waypoint_client import WaypointClientAsync
-from rqt_gui_py.embed import EmbedWidget
 
 class BaseScreen(QWidget):
     back_requested = Signal()
@@ -18,6 +16,7 @@ class BaseScreen(QWidget):
         super().__init__(parent)
         self.ros_node = ros_node
         self.bridge = CvBridge()
+        self.main_window = parent  # Store reference to main window
         
     def on_show(self):
         """Called when screen becomes visible"""
@@ -38,36 +37,21 @@ class HomeScreen(BaseScreen):
         
         # Navigation buttons
         btn_manual = QPushButton("Manual Control")
-        btn_manual.clicked.connect(lambda: self.parent().navigate_to("manual"))
+        btn_manual.clicked.connect(lambda: self.main_window.navigate_to("manual"))
         btn_manual.setStyleSheet("font-size: 18px; padding: 15px;")
         
         btn_mapping = QPushButton("Mapping Mode")
-        btn_mapping.clicked.connect(lambda: self.parent().navigate_to("mapping"))
+        btn_mapping.clicked.connect(lambda: self.main_window.navigate_to("mapping"))
         btn_mapping.setStyleSheet("font-size: 18px; padding: 15px;")
+        
+        btn_rviz = QPushButton("RViz Visualization")
+        btn_rviz.clicked.connect(lambda: self.main_window.navigate_to("rviz"))
+        btn_rviz.setStyleSheet("font-size: 18px; padding: 15px;")
         
         layout.addWidget(btn_manual)
         layout.addWidget(btn_mapping)
+        layout.addWidget(btn_rviz)
         layout.addStretch()
-        
-        self.setLayout(layout)
-
-class RVizScreen(BaseScreen):
-    def __init__(self, ros_node, parent=None):
-        super().__init__(ros_node, parent)
-        layout = QVBoxLayout()
-        
-        # Header with back button
-        header = QHBoxLayout()
-        btn_back = QPushButton("← Home")
-        btn_back.clicked.connect(self.back_requested.emit)
-        header.addWidget(btn_back)
-        header.addStretch()
-        layout.addLayout(header)
-        
-        # RViz embed
-        self.rviz_widget = EmbedWidget(self, "rviz")
-        self.rviz_widget.setObjectName("RViz")
-        layout.addWidget(self.rviz_widget)
         
         self.setLayout(layout)
 
@@ -89,7 +73,7 @@ class ManualControlScreen(BaseScreen):
         
         # Header with back button
         header = QHBoxLayout()
-        btn_back = QPushButton("← Home")
+        btn_back = QPushButton("? Home")
         btn_back.clicked.connect(self.back_requested.emit)
         header.addWidget(btn_back)
         header.addStretch()
@@ -110,6 +94,7 @@ class ManualControlScreen(BaseScreen):
             }
         """)
         self.docking_toggle.toggled.connect(self.toggle_docking_mode)
+        self.docking = 'n'
         
         self.save_dock_button = QPushButton("Save Docking Position")
         self.save_dock_button.setStyleSheet("""
@@ -153,23 +138,33 @@ class ManualControlScreen(BaseScreen):
     def toggle_docking_mode(self, checked):
         state = "ON" if checked else "OFF"
         if state == "ON":
-            self.dock = 'd'
+            self.docking = 'd'
         else:
-            self.dock = 'n'
+            self.docking = 'n'
         self.docking_toggle.setText(f"Docking Mode: {state}")
     
     def save_docking_position(self):
-        self.call_ros_service("s")
+        print("Saving docking position...")
+        client = WaypointClientAsync()
+
+        request = client.send_request(
+            flag=ord('s'),
+            index=0,
+            docking=ord(self.docking)
+        )
+
+        if request.success:
+            self.ros_node.get_logger().info(f'Saved docking position with response: {request.msg}\n')
+        else:
+            self.ros_node.get_logger().info(f'Docking position couldnt be saved with response: {request.msg}\n')
     
     def front_cam_callback(self, msg):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
             h, w, ch = cv_image.shape
             bytes_per_line = ch * w
-            self.front_cam_view.set_image(QImage(
-                cv_image.data, w, h, bytes_per_line, 
-                QImage.Format_BGR888
-            ))
+            q_img = QImage(cv_image.data, w, h, bytes_per_line, QImage.Format_BGR888)
+            self.front_cam_view.set_image(q_img)
         except Exception as e:
             self.ros_node.get_logger().error(f"Front cam error: {str(e)}")
     
@@ -178,31 +173,135 @@ class ManualControlScreen(BaseScreen):
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
             h, w, ch = cv_image.shape
             bytes_per_line = ch * w
-            self.back_cam_view.set_image(QImage(
-                cv_image.data, w, h, bytes_per_line, 
-                QImage.Format_BGR888
-            ))
+            q_img = QImage(cv_image.data, w, h, bytes_per_line, QImage.Format_BGR888)
+            self.back_cam_view.set_image(q_img)
         except Exception as e:
             self.ros_node.get_logger().error(f"Rear cam error: {str(e)}")
-    
-    def call_ros_service(self, service_name, *args):
-        client = WaypointClientAsync()
-        
-        future = client.send_request(
-            flag=ord(service_name[0]),  # Assuming service_name is a single character
-            index=0,
-            docking=ord(self.dock)
-        )
-
-        # Add your custom request fields here if needed
-        if not future.success:
-            print(f'Action {service_name[0]} failed with response {future.msg}')
-        else:
-            print(f'Action {service_name[0]} succeded with response {future.msg}')
     
     def update_views(self):
         self.front_cam_view.update()
         self.back_cam_view.update()
+
+class MappingScreen(BaseScreen):
+    def __init__(self, ros_node, parent=None):
+        super().__init__(ros_node, parent)
+        layout = QVBoxLayout()
+        
+        # Header with back button
+        header = QHBoxLayout()
+        btn_back = QPushButton("? Home")
+        btn_back.clicked.connect(self.back_requested.emit)
+        header.addWidget(btn_back)
+        header.addStretch()
+        layout.addLayout(header)
+        
+        # Map display
+        self.map_view = CameraView("Map Display")
+        layout.addWidget(self.map_view)
+        
+        # Add ROS subscriber for map data
+        self.map_sub = ros_node.create_subscription(
+            Image, '/map_image', self.map_callback, 10)
+        
+        self.setLayout(layout)
+    
+    def map_callback(self, msg):
+        try:
+            cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            h, w, ch = cv_image.shape
+            bytes_per_line = ch * w
+            q_img = QImage(cv_image.data, w, h, bytes_per_line, QImage.Format_BGR888)
+            self.map_view.set_image(q_img)
+        except Exception as e:
+            self.ros_node.get_logger().error(f"Map error: {str(e)}")
+
+class RVizScreen(BaseScreen):
+    def __init__(self, ros_node, parent=None):
+        super().__init__(ros_node, parent)
+        layout = QVBoxLayout()
+        
+        # Header with back button
+        header = QHBoxLayout()
+        btn_back = QPushButton("? Home")
+        btn_back.clicked.connect(self.back_requested.emit)
+        header.addWidget(btn_back)
+        header.addStretch()
+        layout.addLayout(header)
+        
+        # RViz launch controls
+        self.rviz_process = None
+        self._create_process()
+        
+        self.rviz_status = QLabel("RViz: Not running")
+        self.rviz_status.setStyleSheet("font-size: 18px;")
+        
+        self.launch_button = QPushButton("Launch RViz")
+        self.launch_button.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                padding: 10px;
+                background-color: #4CAF50;
+                color: white;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        self.launch_button.clicked.connect(self.toggle_rviz)
+        layout.addWidget(self.launch_button)
+        layout.addWidget(self.rviz_status)
+        
+        self.setLayout(layout)
+    
+    def _create_process(self):
+        if self.rviz_process is None:
+            self.rviz_process = QProcess()
+            if self.rviz_process.thread() != self.thread():
+                self.rviz_process.moveToThread(self.thread())
+            self.rviz_process.finished.connect(self.on_rviz_finished)
+    
+    def toggle_rviz(self):
+        if self.rviz_process.state() == QProcess.NotRunning:
+            self.launch_rviz()
+        else:
+            self.close_rviz()
+    
+    def launch_rviz(self):
+        try:
+            print('Launching')
+            launch_script = """
+            #!/bin/bash
+            source /opt/ros/$ROS_DISTRO/setup.bash
+            source ~/mp_400_workspace/install/setup.bash
+            ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
+            """
+            
+            with open("/tmp/launch_rviz.sh", "w") as f:
+                f.write(launch_script)
+            
+            os.chmod("/tmp/launch_rviz.sh", 0o755)
+            
+            self.rviz_process.setProgram("/tmp/launch_rviz.sh")
+            self.rviz_process.setArguments([])
+            self.rviz_process.startDetached()
+            
+            self.rviz_status.setText("RViz: Launched")
+        except Exception as e:
+            self.rviz_status.setText(f"RViz: Error ({str(e)})")
+    
+    def on_rviz_finished(self, exit_code, exit_status):
+        self.rviz_status.setText("RViz: Not running")
+        self.launch_button.setText("Launch RViz")
+    
+    def close_rviz(self):
+        if self.rviz_process and self.rviz_process.state() == QProcess.Running:
+            self.rviz_process.terminate()
+            if not self.rviz_process.waitForFinished(2000):  # 2 second timeout
+                self.rviz_process.kill()
+        self.on_rviz_finished(0, QProcess.NormalExit)
+    
+    def on_hide(self):
+        self.close_rviz()
 
 class RobotControlApp(QWidget):
     def __init__(self, ros_node=None):
@@ -211,20 +310,25 @@ class RobotControlApp(QWidget):
         self.setWindowTitle("Robot Control System")
         self.showFullScreen()
         
+        # Main layout
+        main_layout = QHBoxLayout(self)
+        
         # Screen management
         self.stacked_widget = QStackedWidget()
+        main_layout.addWidget(self.stacked_widget)
+        
+        # Initialize screens
         self.screens = {
             "home": HomeScreen(ros_node, self),
             "manual": ManualControlScreen(ros_node, self),
+            "mapping": MappingScreen(ros_node, self),
             "rviz": RVizScreen(ros_node, self)
         }
         
+        # Add screens to stacked widget
         for name, screen in self.screens.items():
             self.stacked_widget.addWidget(screen)
             screen.back_requested.connect(lambda: self.navigate_to("home"))
-        
-        self.setLayout(QHBoxLayout())
-        self.layout().addWidget(self.stacked_widget)
         
         # Start with home screen
         self.navigate_to("home")
@@ -233,14 +337,20 @@ class RobotControlApp(QWidget):
         self.setup_escape_controls()
     
     def navigate_to(self, screen_name):
-        current_screen = self.screens.get(self.stacked_widget.currentWidget().objectName())
-        if current_screen:
-            current_screen.on_hide()
-        
-        self.stacked_widget.setCurrentWidget(self.screens[screen_name])
-        self.screens[screen_name].on_show()
+        """Switch to the specified screen"""
+        if screen_name in self.screens:
+            # Call on_hide for current screen
+            current_screen = self.screens.get(self.stacked_widget.currentWidget().objectName())
+            if current_screen:
+                current_screen.on_hide()
+            
+            # Switch to new screen and call on_show
+            screen = self.screens[screen_name]
+            self.stacked_widget.setCurrentWidget(screen)
+            screen.on_show()
     
     def setup_escape_controls(self):
+        """Set up fullscreen toggle and exit controls"""
         self.setFocusPolicy(Qt.StrongFocus)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
@@ -262,3 +372,9 @@ class RobotControlApp(QWidget):
             self.showFullScreen() if not self.isFullScreen() else self.showNormal()
         elif action == exit_action:
             self.close()
+    
+    def closeEvent(self, event):
+        """Clean up RViz process when closing"""
+        if "rviz" in self.screens:
+            self.screens["rviz"].close_rviz()
+        super().closeEvent(event)
