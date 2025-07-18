@@ -8,6 +8,7 @@ from cv_bridge import CvBridge
 from classes.Camera_class import CameraView
 from classes.Button_class import WaypointButton
 from waypoint_maker.waypoint_client import WaypointClientAsync
+from pathlib import Path
 
 class BaseScreen(QWidget):
     back_requested = Signal()
@@ -269,26 +270,43 @@ class RVizScreen(BaseScreen):
     def launch_rviz(self):
         try:
             print('Launching')
-            launch_script = """
-            #!/bin/bash
-            source /opt/ros/$ROS_DISTRO/setup.bash
-            source ~/mp_400_workspace/install/setup.bash
-            ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
-            """
+            launch_script = """#!/bin/bash
+unset QT_QPA_PLATFORM_PLUGIN_PATH
+unset QT_PLUGIN_PATH
+export QT_QPA_PLATFORM=xcb
+source /opt/ros/$ROS_DISTRO/setup.bash
+source ~/mp_400_workspace/install/setup.bash
+ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
+"""
             
-            with open("/tmp/launch_rviz.sh", "w") as f:
+            path = Path(__file__).parent.absolute()
+            script_path = f"{path}/launch_rviz.sh"
+            
+            # Write script with proper line endings
+            with open(script_path, "w", newline='\n') as f:
                 f.write(launch_script)
             
-            os.chmod("/tmp/launch_rviz.sh", 0o755)
+            # Set executable permissions - using os.chmod as requested
+            os.chmod(script_path, 0o755)  # Changed to octal 755 for proper permissions
             
-            self.rviz_process.setProgram("/tmp/launch_rviz.sh")
-            self.rviz_process.setArguments([])
-            self.rviz_process.startDetached()
+            # Verify the script is actually executable
+            if not os.access(script_path, os.X_OK):
+                raise PermissionError(f"Script is not executable: {script_path}")
             
-            self.rviz_status.setText("RViz: Launched")
+            print("Running Subprocess")
+            
+            # Execute using bash explicitly with the environment
+            result = subprocess.run(script_path)
+
+        except subprocess.CalledProcessError as e:
+            error_msg = f"RViz failed (code {e.returncode}): {e.stderr}"
+            self.rviz_status.setText(error_msg)
+            print(error_msg)
         except Exception as e:
-            self.rviz_status.setText(f"RViz: Error ({str(e)})")
-    
+            error_msg = f"RViz launch error: {str(e)}"
+            self.rviz_status.setText(error_msg)
+            print(error_msg)
+        
     def on_rviz_finished(self, exit_code, exit_status):
         self.rviz_status.setText("RViz: Not running")
         self.launch_button.setText("Launch RViz")
