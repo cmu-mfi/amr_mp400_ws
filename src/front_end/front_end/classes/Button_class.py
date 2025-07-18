@@ -1,5 +1,7 @@
+import os, subprocess
+from pathlib import Path
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, QRect
+from PySide6.QtCore import Qt, QRect, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush
 from std_msgs.msg import Int32
 from waypoint_maker.waypoint_client import WaypointClientAsync
@@ -8,6 +10,8 @@ from waypoint_maker.waypoint_client import WaypointClientAsync
 
 
 class WaypointButton(QWidget):
+    go_section_clicked = Signal()
+
     def __init__(self, parent=None, btn_id=0, name="", x=0, y=0, width=400, height=80, ros_node=None):
         super().__init__(parent)
         self.ros_node = ros_node
@@ -100,9 +104,11 @@ class WaypointButton(QWidget):
     def mousePressEvent(self, event):
         if not self.hovered_action:
             return
-            
+        
         client = WaypointClientAsync()
         self.call_ros_service(client)
+        if self.hovered_action == "g":
+            self.go_section_clicked.emit()
     
     def call_ros_service(self, client: WaypointClientAsync):
         
@@ -116,3 +122,43 @@ class WaypointButton(QWidget):
             print(f'Action {self.hovered_action} failed with response {future.msg}')
         else:
             print(f'Action {self.hovered_action} succeded with response {future.msg}')
+    
+    def launch_rviz(self):
+        try:
+            print('Launching')
+            launch_script = """#!/bin/bash
+unset QT_QPA_PLATFORM_PLUGIN_PATH
+unset QT_PLUGIN_PATH
+export QT_QPA_PLATFORM=xcb
+source /opt/ros/$ROS_DISTRO/setup.bash
+source ~/mp_400_workspace/install/setup.bash
+ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
+"""
+            
+            path = Path(__file__).parent.absolute()
+            script_path = f"{path}/launch_rviz.sh"
+            
+            # Write script with proper line endings
+            with open(script_path, "w", newline='\n') as f:
+                f.write(launch_script)
+            
+            # Set executable permissions - using os.chmod as requested
+            os.chmod(script_path, 0o755)  # Changed to octal 755 for proper permissions
+            
+            # Verify the script is actually executable
+            if not os.access(script_path, os.X_OK):
+                raise PermissionError(f"Script is not executable: {script_path}")
+            
+            print("Running Subprocess")
+            
+            # Execute using bash explicitly with the environment
+            result = subprocess.run(script_path)
+
+        except subprocess.CalledProcessError as e:
+            error_msg = f"RViz failed (code {e.returncode}): {e.stderr}"
+            self.rviz_status.setText(error_msg)
+            print(error_msg)
+        except Exception as e:
+            error_msg = f"RViz launch error: {str(e)}"
+            self.rviz_status.setText(error_msg)
+            print(error_msg)

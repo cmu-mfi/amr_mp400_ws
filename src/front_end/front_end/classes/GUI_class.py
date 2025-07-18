@@ -45,13 +45,8 @@ class HomeScreen(BaseScreen):
         btn_mapping.clicked.connect(lambda: self.main_window.navigate_to("mapping"))
         btn_mapping.setStyleSheet("font-size: 18px; padding: 15px;")
         
-        btn_rviz = QPushButton("RViz Visualization")
-        btn_rviz.clicked.connect(lambda: self.main_window.navigate_to("rviz"))
-        btn_rviz.setStyleSheet("font-size: 18px; padding: 15px;")
-        
         layout.addWidget(btn_manual)
         layout.addWidget(btn_mapping)
-        layout.addWidget(btn_rviz)
         layout.addStretch()
         
         self.setLayout(layout)
@@ -216,111 +211,6 @@ class MappingScreen(BaseScreen):
         except Exception as e:
             self.ros_node.get_logger().error(f"Map error: {str(e)}")
 
-class RVizScreen(BaseScreen):
-    def __init__(self, ros_node, parent=None):
-        super().__init__(ros_node, parent)
-        layout = QVBoxLayout()
-        
-        # Header with back button
-        header = QHBoxLayout()
-        btn_back = QPushButton("? Home")
-        btn_back.clicked.connect(self.back_requested.emit)
-        header.addWidget(btn_back)
-        header.addStretch()
-        layout.addLayout(header)
-        
-        # RViz launch controls
-        self.rviz_process = None
-        self._create_process()
-        
-        self.rviz_status = QLabel("RViz: Not running")
-        self.rviz_status.setStyleSheet("font-size: 18px;")
-        
-        self.launch_button = QPushButton("Launch RViz")
-        self.launch_button.setStyleSheet("""
-            QPushButton {
-                font-size: 18px;
-                padding: 10px;
-                background-color: #4CAF50;
-                color: white;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        self.launch_button.clicked.connect(self.toggle_rviz)
-        layout.addWidget(self.launch_button)
-        layout.addWidget(self.rviz_status)
-        
-        self.setLayout(layout)
-    
-    def _create_process(self):
-        if self.rviz_process is None:
-            self.rviz_process = QProcess()
-            if self.rviz_process.thread() != self.thread():
-                self.rviz_process.moveToThread(self.thread())
-            self.rviz_process.finished.connect(self.on_rviz_finished)
-    
-    def toggle_rviz(self):
-        if self.rviz_process.state() == QProcess.NotRunning:
-            self.launch_rviz()
-        else:
-            self.close_rviz()
-    
-    def launch_rviz(self):
-        try:
-            print('Launching')
-            launch_script = """#!/bin/bash
-unset QT_QPA_PLATFORM_PLUGIN_PATH
-unset QT_PLUGIN_PATH
-export QT_QPA_PLATFORM=xcb
-source /opt/ros/$ROS_DISTRO/setup.bash
-source ~/mp_400_workspace/install/setup.bash
-ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
-"""
-            
-            path = Path(__file__).parent.absolute()
-            script_path = f"{path}/launch_rviz.sh"
-            
-            # Write script with proper line endings
-            with open(script_path, "w", newline='\n') as f:
-                f.write(launch_script)
-            
-            # Set executable permissions - using os.chmod as requested
-            os.chmod(script_path, 0o755)  # Changed to octal 755 for proper permissions
-            
-            # Verify the script is actually executable
-            if not os.access(script_path, os.X_OK):
-                raise PermissionError(f"Script is not executable: {script_path}")
-            
-            print("Running Subprocess")
-            
-            # Execute using bash explicitly with the environment
-            result = subprocess.run(script_path)
-
-        except subprocess.CalledProcessError as e:
-            error_msg = f"RViz failed (code {e.returncode}): {e.stderr}"
-            self.rviz_status.setText(error_msg)
-            print(error_msg)
-        except Exception as e:
-            error_msg = f"RViz launch error: {str(e)}"
-            self.rviz_status.setText(error_msg)
-            print(error_msg)
-        
-    def on_rviz_finished(self, exit_code, exit_status):
-        self.rviz_status.setText("RViz: Not running")
-        self.launch_button.setText("Launch RViz")
-    
-    def close_rviz(self):
-        if self.rviz_process and self.rviz_process.state() == QProcess.Running:
-            self.rviz_process.terminate()
-            if not self.rviz_process.waitForFinished(2000):  # 2 second timeout
-                self.rviz_process.kill()
-        self.on_rviz_finished(0, QProcess.NormalExit)
-    
-    def on_hide(self):
-        self.close_rviz()
-
 class RobotControlApp(QWidget):
     def __init__(self, ros_node=None):
         super().__init__()
@@ -340,7 +230,6 @@ class RobotControlApp(QWidget):
             "home": HomeScreen(ros_node, self),
             "manual": ManualControlScreen(ros_node, self),
             "mapping": MappingScreen(ros_node, self),
-            "rviz": RVizScreen(ros_node, self)
         }
         
         # Add screens to stacked widget
@@ -391,8 +280,4 @@ class RobotControlApp(QWidget):
         elif action == exit_action:
             self.close()
     
-    def closeEvent(self, event):
-        """Clean up RViz process when closing"""
-        if "rviz" in self.screens:
-            self.screens["rviz"].close_rviz()
-        super().closeEvent(event)
+    
