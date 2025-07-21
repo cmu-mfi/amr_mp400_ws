@@ -1,16 +1,16 @@
-import os, subprocess
+import os, subprocess, threading
 from pathlib import Path
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, QRect, Signal
+from PySide6.QtCore import Qt, QRect, Signal, QObject
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush
 from std_msgs.msg import Int32
 from waypoint_maker.waypoint_client import WaypointClientAsync
-
-
-
+import rclpy
+from rclpy.node import Node
 
 class WaypointButton(QWidget):
     go_section_clicked = Signal()
+    rviz_closed = Signal()
 
     def __init__(self, parent=None, btn_id=0, name="", x=0, y=0, width=400, height=80, ros_node=None):
         super().__init__(parent)
@@ -47,6 +47,10 @@ class WaypointButton(QWidget):
         }
         
         self.hovered_action = None
+
+        self.status_sub = None
+        self.last_status = None
+        self.robot_namespace = "robot1"
     
     def active_state_callback(self, msg):
         """Update active state based on ROS topic"""
@@ -107,11 +111,9 @@ class WaypointButton(QWidget):
         
         client = WaypointClientAsync()
         self.call_ros_service(client)
-        if self.hovered_action == "g":
-            self.go_section_clicked.emit()
+        
     
     def call_ros_service(self, client: WaypointClientAsync):
-        
         future = client.send_request(
             flag=ord(self.hovered_action),
             index=self.btn_id,
@@ -122,43 +124,84 @@ class WaypointButton(QWidget):
             print(f'Action {self.hovered_action} failed with response {future.msg}')
         else:
             print(f'Action {self.hovered_action} succeded with response {future.msg}')
+        if self.hovered_action == "g":
+            self.launch_rviz()
     
     def launch_rviz(self):
         try:
-            print('Launching')
+            # Create a temporary launch script
             launch_script = """#!/bin/bash
 unset QT_QPA_PLATFORM_PLUGIN_PATH
 unset QT_PLUGIN_PATH
 export QT_QPA_PLATFORM=xcb
 source /opt/ros/$ROS_DISTRO/setup.bash
 source ~/mp_400_workspace/install/setup.bash
-ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
+exec ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
 """
+            script_path = Path("/tmp/launch_rviz.sh")
+            script_path.write_text(launch_script)
+            script_path.chmod(0o755)
             
-            path = Path(__file__).parent.absolute()
-            script_path = f"{path}/launch_rviz.sh"
-            
-            # Write script with proper line endings
-            with open(script_path, "w", newline='\n') as f:
-                f.write(launch_script)
-            
-            # Set executable permissions - using os.chmod as requested
-            os.chmod(script_path, 0o755)  # Changed to octal 755 for proper permissions
-            
-            # Verify the script is actually executable
-            if not os.access(script_path, os.X_OK):
-                raise PermissionError(f"Script is not executable: {script_path}")
-            
-            print("Running Subprocess")
-            
-            # Execute using bash explicitly with the environment
-            result = subprocess.run(script_path)
+            # Launch RViz in a separate process
+            env = os.environ.copy()
+            env["ROBOT_NAMESPACE"] = self.robot_namespace  # Make sure this is set
+            self.rviz_process = subprocess.Popen(
+                [str(script_path)],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            print("Launched rviz")
 
-        except subprocess.CalledProcessError as e:
-            error_msg = f"RViz failed (code {e.returncode}): {e.stderr}"
-            self.rviz_status.setText(error_msg)
-            print(error_msg)
+            
         except Exception as e:
-            error_msg = f"RViz launch error: {str(e)}"
-            self.rviz_status.setText(error_msg)
-            print(error_msg)
+            print(f"RViz launch error: {str(e)}")
+
+        self._setup_status_monitoring()
+
+    def _setup_status_monitoring(self):
+        from action_msgs.msg import GoalStatusArray
+        
+        self.status_sub = self.ros_node.create_subscription(
+            GoalStatusArray,
+            f'/{self.robot_namespace}/navigate_to_pose/_action/status',
+            self._status_callback,
+            10
+        )
+
+    def _status_callback(self, msg):
+        """Handle status updates from main thread's spin"""
+        for status in msg.status_list:
+            if status.status == 4 or status.status == 0:  # SUCCEEDED
+                print(f"Process finished with status: {status.status}")
+                self.terminate_rviz()
+                break
+
+    def terminate_rviz(self):
+        if hasattr(self, 'rviz_process') and self.rviz_process:
+            try:
+                # Terminate the process
+                self.rviz_process.terminate()
+                
+                # Wait briefly for clean shutdown
+                try:
+                    self.rviz_process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    self.rviz_process.kill()  # Force kill if needed
+                    
+                # Clean up
+                self.rviz_process = None
+                if hasattr(self, 'status_sub'):
+                    self.ros_node.destroy_subscription(self.status_sub)
+                    self.status_sub = None
+                
+                print("RViz terminated successfully")
+                self.rviz_closed.emit()  # Notify other components
+                
+            except Exception as e:
+                print(f"Error terminating RViz: {str(e)}")
+            
+
+    def closeEvent(self, event):
+        self.terminate_rviz()
+        super().closeEvent(event)
