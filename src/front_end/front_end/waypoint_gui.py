@@ -1,5 +1,5 @@
 import os
-from classes.GUI_class import RobotControlApp  # Renamed from DockingGUI
+from front_end.GUI_class import RobotControlApp # Renamed from DockingGUI
 import rclpy
 from PySide6.QtWidgets import QApplication
 

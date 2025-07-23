@@ -1,11 +1,11 @@
-import os, subprocess, threading
+import os, subprocess
 from pathlib import Path
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, QRect, Signal, QObject
+from PySide6.QtCore import Qt, QRect, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush
 from std_msgs.msg import Int32
 from waypoint_maker.waypoint_client import WaypointClientAsync
-import rclpy
+from action_msgs.msg import GoalStatusArray
 from rclpy.node import Node
 
 class WaypointButton(QWidget):
@@ -14,12 +14,14 @@ class WaypointButton(QWidget):
 
     def __init__(self, parent=None, btn_id=0, name="", x=0, y=0, width=400, height=80, ros_node=None):
         super().__init__(parent)
-        self.ros_node = ros_node
+        self.ros_node: Node = ros_node
         self.btn_id = btn_id
         self.name = name
         self.setGeometry(x, y, width, height)
         self.active = False
         self.setMouseTracking(True)
+        self.timer = None
+        self.parent = parent
         
         # Initialize ROS 2 subscriber for active state
         self.active_sub = self.ros_node.create_subscription(
@@ -110,26 +112,26 @@ class WaypointButton(QWidget):
             return
         
         client = WaypointClientAsync()
-        self.call_ros_service(client)
+        self.call_ros_service(client, self.hovered_action)
         
     
-    def call_ros_service(self, client: WaypointClientAsync):
+    def call_ros_service(self, client: WaypointClientAsync, action):
         future = client.send_request(
-            flag=ord(self.hovered_action),
+            flag=ord(action),
             index=self.btn_id,
-            docking=0  # Assuming docking is not used here, set to 0
+            docking=ord(self.parent.docking)
         )
         
         if not future.success:
-            print(f'Action {self.hovered_action} failed with response {future.msg}')
+            print(f'Action {action} failed with response {future.msg}')
         else:
-            print(f'Action {self.hovered_action} succeded with response {future.msg}')
-        if self.hovered_action == "g":
+            print(f'Action {action} succeded with response {future.msg}')
+        if action == "g":
             self.launch_rviz()
     
     def launch_rviz(self):
         try:
-            # Create a temporary launch script
+           
             launch_script = """#!/bin/bash
 unset QT_QPA_PLATFORM_PLUGIN_PATH
 unset QT_PLUGIN_PATH
@@ -157,51 +159,44 @@ exec ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=
         except Exception as e:
             print(f"RViz launch error: {str(e)}")
 
-        self._setup_status_monitoring()
+    #     self._setup_status_monitoring()
 
-    def _setup_status_monitoring(self):
-        from action_msgs.msg import GoalStatusArray
-        
-        self.status_sub = self.ros_node.create_subscription(
-            GoalStatusArray,
-            f'/{self.robot_namespace}/navigate_to_pose/_action/status',
-            self._status_callback,
-            10
-        )
+    # def _setup_status_monitoring(self):
+    #     self.status_sub = self.ros_node.create_subscription(
+    #         GoalStatusArray,
+    #         f'/{self.robot_namespace}/navigate_to_pose/_action/status',
+    #         self.handle_status,
+    #         10
+    #     )
 
-    def _status_callback(self, msg):
-        """Handle status updates from main thread's spin"""
-        for status in msg.status_list:
-            if status.status == 4 or status.status == 0:  # SUCCEEDED
-                print(f"Process finished with status: {status.status}")
-                self.terminate_rviz()
-                break
+    # def handle_status(self, msg: GoalStatusArray):
+    #     self.ros_node.get_logger().info("Checking latest Rviz status")
+    #     status = msg.status_list[len(msg.status_list) - 1]
+    #     self.ros_node.get_logger().info(f'Status: {status.status}')
+    #     if status.status == 4 or status.status == 0:  # SUCCEEDED
+    #         print(f"Process finished with status: {status.status}")
+    #         self.ros_node.get_logger().info("Terminating Rviz")
+    #         self.terminate_rviz()
 
-    def terminate_rviz(self):
-        if hasattr(self, 'rviz_process') and self.rviz_process:
-            try:
-                # Terminate the process
-                self.rviz_process.terminate()
-                
-                # Wait briefly for clean shutdown
-                try:
-                    self.rviz_process.wait(timeout=2.0)
-                except subprocess.TimeoutExpired:
-                    self.rviz_process.kill()  # Force kill if needed
+    # def terminate_rviz(self):
+    #     if hasattr(self, 'rviz_process') and self.rviz_process:
+    #         try:
+    #             # Terminate the process
+    #             self.rviz_process.kill()
+    #             self.ros_node.get_logger().info("Post Kill")
                     
-                # Clean up
-                self.rviz_process = None
-                if hasattr(self, 'status_sub'):
-                    self.ros_node.destroy_subscription(self.status_sub)
-                    self.status_sub = None
+    #             # Clean up
+    #             self.rviz_process = None
+    #             # if hasattr(self, 'status_sub'):
+    #             #     self.ros_node.destroy_subscription(self.status_sub)
+    #             #     self.ros_node.get_logger().info("Destroyed Status Sub")
+    #             #     self.status_sub = None
                 
-                print("RViz terminated successfully")
-                self.rviz_closed.emit()  # Notify other components
-                
-            except Exception as e:
-                print(f"Error terminating RViz: {str(e)}")
-            
+    #             print("RViz terminated successfully")
+    #             self.rviz_closed.emit()  # Notify other components
 
-    def closeEvent(self, event):
-        self.terminate_rviz()
-        super().closeEvent(event)
+    #             # self.ros_node.destroy_timer(self.timer)
+    #             # self.ros_node.get_logger().info("Destroyed Timer")
+                
+    #         except Exception as e:
+    #             print(f"Error terminating RViz: {str(e)}")

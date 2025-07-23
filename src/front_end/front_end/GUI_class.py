@@ -1,14 +1,12 @@
-import subprocess, os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
                               QPushButton, QMenu, QLabel, QLineEdit)
 from PySide6.QtCore import Qt, QTimer, Signal, QProcess, QProcessEnvironment
 from PySide6.QtGui import QImage
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-from classes.Camera_class import CameraView
-from classes.Button_class import WaypointButton
+from front_end.Camera_class import CameraView
+from front_end.Button_class import WaypointButton
 from waypoint_maker.waypoint_client import WaypointClientAsync
-from pathlib import Path
 
 class BaseScreen(QWidget):
     back_requested = Signal()
@@ -109,7 +107,7 @@ class ManualControlScreen(BaseScreen):
         self.waypoint_panel = QVBoxLayout()
         self.waypoint_buttons = []
         for i in range(5):
-            btn = WaypointButton(btn_id=i, name=f"Waypoint {i}", ros_node=ros_node)
+            btn = WaypointButton(btn_id=i, name=f"Waypoint {i}", ros_node=ros_node, parent=self)
             self.waypoint_buttons.append(btn)
             self.waypoint_panel.addWidget(btn)
         
