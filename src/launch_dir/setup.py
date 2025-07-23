@@ -1,8 +1,7 @@
 from setuptools import find_packages, setup
 import os 
 from glob import glob
-
-package_name = 'waypoint_maker'
+package_name = 'launch_dir'
 
 setup(
     name=package_name,
@@ -16,16 +15,13 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='kaper',
-    maintainer_email='kacpergasior19@gmail.com',
+    maintainer='neobotix',
+    maintainer_email='riyashah@andrew.cmu.edu',
     description='TODO: Package description',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'waypoint_service = waypoint_maker.waypoint_srv:main',
-            'waypoint_client = waypoint_maker.waypoint_client:main',
-            'fiducial_front = waypoint_maker.front_fiducial_detector:main'
         ],
     },
 )

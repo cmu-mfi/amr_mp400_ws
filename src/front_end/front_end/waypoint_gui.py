@@ -1,13 +1,17 @@
-from front_end.classes.GUI_class import DockingGUI
+import os
+from front_end.GUI_class import RobotControlApp # Renamed from DockingGUI
 import rclpy
 from PySide6.QtWidgets import QApplication
 
 def main():
     rclpy.init()
     ros_node = rclpy.create_node('robot_control_gui')
+
+    os.environ["ROS_DISTRO"] = "humble"  # or your distro
+    os.environ["WORKSPACE"] = "~/mp_400_ws/" 
     
     app = QApplication([])
-    gui = DockingGUI(ros_node)
+    gui = RobotControlApp(ros_node)
     
     # ROS executor in a separate thread
     executor = rclpy.executors.SingleThreadedExecutor()

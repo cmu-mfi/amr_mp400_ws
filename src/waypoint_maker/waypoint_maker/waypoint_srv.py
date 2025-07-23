@@ -41,9 +41,9 @@ class WaypointSrv(Node):
         self.action_client = ActionClient(
             self, NavigateToPose, "/robot1/navigate_to_pose"
         )
-
-        dir = os.path.dirname(os.path.abspath(__file__))
-        self.file_path = os.path.join(dir, "robot_poses.txt")
+        
+        path = "/home/neobotix/mp_400_workspace/src/amr_mp400_ws/src/waypoint_maker/waypoint_maker/robot_poses.txt"
+        self.file_path = path
         self.file = None
 
         self.latest = None
@@ -111,6 +111,7 @@ class WaypointSrv(Node):
 
             case "g":
                 # Need index to go to, dont need robot pose
+                self.get_logger().info(f"Go given with {dock}")
                 response.success = self.publish_waypoint(index)
                 if response.success: 
                     response.msg = "Waypoint Published!"

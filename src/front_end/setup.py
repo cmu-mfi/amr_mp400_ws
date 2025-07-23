@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
 package_name = 'front_end'
 
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.py'))
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -20,7 +23,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'sub_test = front_end.sub_test:main'
+            'front_end = front_end.waypoint_gui:main',
+            'GUI_class = front_end.GUI_class',
+            'Camera_class = front_end.Camera_class',
+            'Button_class = front_end.Button_class'
         ],
     },
 )
