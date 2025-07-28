@@ -1,6 +1,6 @@
 import os, subprocess
 from pathlib import Path
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QInputDialog 
 from PySide6.QtCore import Qt, QRect, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush
 from std_msgs.msg import Int32
@@ -73,7 +73,21 @@ class WaypointButton(QWidget):
                     brush.setColor(section["color"].lighter(120))
                 painter.setBrush(brush)
                 painter.drawRect(section["rect"])
-                painter.drawText(section["rect"], Qt.AlignCenter, section["name"])
+
+                section_rect = section["rect"]
+                painter.drawText(
+                    QRect(section_rect.x(), section_rect.y(), 
+                        section_rect.width(), section_rect.height()//2),
+                    Qt.AlignCenter, 
+                    section["name"]
+                )
+                if self.name:
+                    painter.drawText(
+                        QRect(section_rect.x(), section_rect.y() + section_rect.height()//2,
+                            section_rect.width(), section_rect.height()//2),
+                        Qt.AlignCenter, 
+                        self.name
+                    )
         else:
             # Inactive state - single section with dotted border
             pen.setStyle(Qt.DotLine)
@@ -111,6 +125,18 @@ class WaypointButton(QWidget):
         if not self.hovered_action:
             return
         
+        if self.hovered_action in ['a', 'o']:
+            label, ok = QInputDialog.getText(
+                self,
+                f"Waypoint {self.btn_id} Label",
+                "Enter waypoint label:",
+                text=self.name if self.name else f"Waypoint {self.btn_id}"
+            )
+            if not ok:  # User cancelled
+                return
+            self.name = label
+            self.update()  # Refresh the button display
+
         client = WaypointClientAsync()
         self.call_ros_service(client, self.hovered_action)
         

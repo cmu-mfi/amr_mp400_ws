@@ -9,6 +9,7 @@ from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
 from amr_mp400_interfaces.srv import SetFlag
 from std_msgs.msg import Int32
+from aruco_msgs.msg import MarkerArray, Marker
 
 class WaypointSrv(Node):
 
@@ -27,6 +28,13 @@ class WaypointSrv(Node):
             'robot1/map_pose',
             self.sub_callback,
             qos_profile=subscriber_qos
+        )
+
+        self.back_marker_sub = self.create_subscription(
+            MarkerArray,
+            "/robot1/marker_publisher/markers",
+            self._back_marker_callback,
+            10
         )
 
         self.timer_period = 0.1
@@ -48,6 +56,13 @@ class WaypointSrv(Node):
 
         self.latest = None
         self.docking = None
+        self.back_marker: Marker = None
+
+    def _back_marker_callback(self, msg: MarkerArray):
+        if len(msg.markers) > 0:
+            self.back_marker = msg.markers[0]
+        else:
+            self.back_marker = None
 
     def sub_callback(self, msg: PoseWithCovarianceStamped):
         self.latest = msg.pose.pose
@@ -151,7 +166,10 @@ class WaypointSrv(Node):
         if ind == None:
             ind = len(self.pose_dict.keys())
         self.get_logger().info(f'Ind = {ind}')
-        self.pose_dict[ind] = pose
+        self.pose_dict[ind] = {}
+        dict = self.pose_dict[ind]
+        dict['pose'] = pose
+        dict['marker_id'] = self.back_marker.id if self.back_marker else None
         return True
     
     def overwrite_all(self, pose):
@@ -194,7 +212,6 @@ class WaypointSrv(Node):
 
         goal_future = self.action_client.send_goal_async(goal_pose)
         goal_future.add_done_callback(self.goal_response)
-
         return True
     
     def publish_amount(self):
