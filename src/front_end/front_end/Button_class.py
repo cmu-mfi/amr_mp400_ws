@@ -1,3 +1,4 @@
+from cProfile import label
 import os, subprocess
 from pathlib import Path
 from PySide6.QtWidgets import QWidget, QInputDialog 
@@ -133,8 +134,9 @@ class WaypointButton(QWidget):
                 text=self.name if self.name else f"Waypoint {self.btn_id}"
             )
             if not ok:  # User cancelled
-                return
-            self.name = label
+                self.name = ""
+            else: 
+                self.name = label
             self.update()  # Refresh the button display
 
         client = WaypointClientAsync()
@@ -145,7 +147,8 @@ class WaypointButton(QWidget):
         future = client.send_request(
             flag=ord(action),
             index=self.btn_id,
-            docking=ord(self.parent.docking)
+            docking=ord(self.parent.docking),
+            label=self.name
         )
         
         if not future.success:

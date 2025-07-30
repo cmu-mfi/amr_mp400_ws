@@ -144,7 +144,8 @@ class ManualControlScreen(BaseScreen):
         request = client.send_request(
             flag=ord('s'),
             index=0,
-            docking=ord(self.docking)
+            docking=ord(self.docking), 
+            label=''
         )
 
         if request.success:

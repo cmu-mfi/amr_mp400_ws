@@ -15,10 +15,11 @@ class WaypointClientAsync(Node):
         
         self.request = SetFlag.Request()
     
-    def send_request(self, flag, index, docking):
+    def send_request(self, flag, index, docking, label):
         self.request.flag = flag
         self.request.index = index
         self.request.docking = docking
+        self.request.label = label
 
         self.future = self.client.call_async(self.request)
         rclpy.spin_until_future_complete(self, self.future)

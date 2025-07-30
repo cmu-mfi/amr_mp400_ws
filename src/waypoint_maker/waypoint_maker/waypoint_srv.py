@@ -72,6 +72,7 @@ class WaypointSrv(Node):
         flag = chr(request.flag)
         index = str(request.index)
         dock = chr(request.docking)
+        label = request.label
         
         if not self.latest:
             response.success = False
@@ -97,13 +98,13 @@ class WaypointSrv(Node):
             case "a":
 
                 # Dont need index to add, need robot pose
-                response.success = self.append_write(pose)
+                response.success = self.append_write(pose, label)
                 response.msg = "Wrote Robot Pose!"
 
 
             case "o":
                 # Need index to overwrite, need new robot pose
-                response.success = self.overwrite_waypoint(index, pose)
+                response.success = self.overwrite_waypoint(index, pose, label)
                 if response.success:
                     response.msg = "Waypoint Overwritten!"
                 else:
@@ -161,7 +162,7 @@ class WaypointSrv(Node):
             self.get_logger().info('Calling Pre-Docking Offset')
             client_future = client.call_async(client_request)
 
-    def append_write(self, pose, ind=None):
+    def append_write(self, pose, label, ind=None):
         self.get_logger().info(f'Ind = {ind}')
         if ind == None:
             ind = len(self.pose_dict.keys())
@@ -170,17 +171,18 @@ class WaypointSrv(Node):
         dict = self.pose_dict[ind]
         dict['pose'] = pose
         dict['marker_id'] = self.back_marker.id if self.back_marker else None
+        dict['name'] = label
         return True
     
     def overwrite_all(self, pose):
         self.pose_dict.clear()
         return self.append_write(pose)
 
-    def overwrite_waypoint(self, index, pose):
+    def overwrite_waypoint(self, index, pose, label):
         if not self.good_index(index):
             return False
         
-        return self.append_write(pose, ind=index)
+        return self.append_write(pose, label, ind=index)
 
     def delete_waypoint(self, index):
         if not self.good_index(index):
