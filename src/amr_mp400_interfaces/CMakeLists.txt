@@ -10,9 +10,21 @@ find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 find_package(rosidl_default_generators REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
+set(srv_files
+  "srv/GroundTruth.srv"
+  "srv/SetFlag.srv"
+)
+
 rosidl_generate_interfaces(${PROJECT_NAME}
-	"srv/SetFlag.srv"
- )
+  ${srv_files}
+  DEPENDENCIES geometry_msgs  # Add action_msgs here
+)
+#  rosidl_generate_interfaces(${PROJECT_NAME}
+#   "srv/GroundTruth.srv"
+#  )
+ 
 ament_export_dependencies(rosidl_default_runtime)
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

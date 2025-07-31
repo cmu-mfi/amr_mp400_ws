@@ -1,15 +1,18 @@
 import os
 import rclpy
 import json
+import tf2_ros
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_srvs.srv import Trigger
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
-from amr_mp400_interfaces.srv import SetFlag
+from amr_mp400_interfaces.srv import SetFlag, GroundTruth 
 from std_msgs.msg import Int32
 from aruco_msgs.msg import MarkerArray, Marker
+from tf2_ros import Buffer, TransformListener 
+from tf2_geometry_msgs import do_transform_pose_with_covariance_stamped
 
 class WaypointSrv(Node):
 
@@ -54,9 +57,15 @@ class WaypointSrv(Node):
         self.file_path = path
         self.file = None
 
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+
+
         self.latest = None
         self.docking = None
         self.back_marker: Marker = None
+        self.last_ground_truth = None
 
     def _back_marker_callback(self, msg: MarkerArray):
         if len(msg.markers) > 0:
@@ -107,7 +116,7 @@ class WaypointSrv(Node):
                 response.success = self.overwrite_waypoint(index, pose, label)
                 if response.success:
                     response.msg = "Waypoint Overwritten!"
-                else:
+                else:  
                     response.msg = "Couldnt overwrite waypoint, give good index"
 
             case "w":
@@ -140,6 +149,33 @@ class WaypointSrv(Node):
                 response.success = True
                 response.msg = 'Saved Marker Pose'
 
+                # Want a localize case with the marker pose
+            case "l":
+                self.get_logger().info("Localizing with marker pose")
+                if self.back_marker:
+                    self.pose_pub = self.create_publisher(
+                        PoseWithCovarianceStamped, 
+                        '/initialpose',
+                        10
+                    )
+
+                    initial_pose = PoseWithCovarianceStamped()
+                    initial_pose.header = self.back_marker.header
+                    initial_pose.pose = self.back_marker.pose
+
+                    self.pose_pub.publish(initial_pose)
+                    response.success = True
+                    response.msg = "Published Initial Pose with Marker Pose"
+                    self.pose_pub.destroy()
+
+                    map_pose = self.marker_to_map()
+                    self.last_ground_truth = map_pose
+                else:
+                    response.success = False
+                    response.msg = "No Marker Pose to Localize with"
+
+
+
             case _:
                 self.get_logger().info("Bad Flag Given: Try 'h' for help, or one of ['a', 'o', 'w', 'd', 'g'] for functionality")
                 response.success = True
@@ -161,6 +197,11 @@ class WaypointSrv(Node):
             client_request = Trigger.Request()
             self.get_logger().info('Calling Pre-Docking Offset')
             client_future = client.call_async(client_request)
+            if client_future.result(): 
+                # Save marker pose to last ground truth
+                self.get_logger().info('Pre-Docking Offset Success')
+                self.last_ground_truth = self.marker_to_map()
+
 
     def append_write(self, pose, label, ind=None):
         self.get_logger().info(f'Ind = {ind}')
@@ -172,6 +213,11 @@ class WaypointSrv(Node):
         dict['pose'] = pose
         dict['marker_id'] = self.back_marker.id if self.back_marker else None
         dict['name'] = label
+        
+        map_pose = self.marker_to_map()
+        self.last_ground_truth = map_pose
+        
+        dict['marker_pose'] = map_pose #  transform from map to marker + marker offset from other file
         return True
     
     def overwrite_all(self, pose):
@@ -213,6 +259,7 @@ class WaypointSrv(Node):
         goal_pose.pose.pose.orientation.w = float(pose[6])
 
         goal_future = self.action_client.send_goal_async(goal_pose)
+        self.last_goal = goal_pose
         goal_future.add_done_callback(self.goal_response)
         return True
     
@@ -237,12 +284,16 @@ class WaypointSrv(Node):
         if result:
             # Nav2 completed, can do predocking
             if self.docking:
-                client = self.create_client(Trigger, 'pre_docker_docking')
+                client = self.create_client(GroundTruth, 'pre_docker_docking')
 
                 while not client.wait_for_service(timeout_sec=1.0):
                     self.get_logger().info('Pre Docking Docking Service not available, trying again...')
                 
-                client_request = Trigger.Request()
+                client_request = GroundTruth.request()
+                client_request.goal = self.last_goal.pose
+                client_request.last_ground_truth = self.last_ground_truth
+                client_request.curr_pose = self.latest
+
                 self.get_logger().info('Calling Pre-Docking Docking')
                 client_future = client.call_async(client_request)
 
@@ -291,6 +342,24 @@ class WaypointSrv(Node):
         for i, key in enumerate(sorted(self.pose_dict.keys(), key=int)):
             new_dict[str(i)] = self.pose_dict[key]
         self.pose_dict = new_dict
+
+    def marker_to_map(self):
+        try: 
+            transform=self.tf_buffer.lookup_transform(
+                'map',
+                self.back_marker.header.frame_id,
+                self.back_marker.header.stamp,
+                timeout=rclpy.duration.Duration(seconds=1.0)
+            )
+            marker_pose = self.back_marker.pose.pose
+
+            map_pose = do_transform_pose_with_covariance_stamped(marker_pose, transform)
+
+        except Exception as e:
+            self.get_logger().info(f"Transform error with {e}")
+            return False
+
+        return map_pose
 
 ####################################################### End Helpers ##################################################################################
 

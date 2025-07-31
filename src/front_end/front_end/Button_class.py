@@ -34,12 +34,15 @@ class WaypointButton(QWidget):
         
         # Section definitions (different when active/inactive)
         self.active_sections = [
-            {"name": "Go", "rect": QRect(0, 0, width//3, height), 
+            {"name": "Go", "rect": QRect(0, 0, width//4, height), 
              "color": QColor(144, 238, 144), "action": "g"},
-            {"name": "Overwrite", "rect": QRect(width//3, 0, width//3, height), 
+            {"name": "Overwrite", "rect": QRect(width//4, 0, width//4, height), 
              "color": QColor(255, 255, 153), "action": "o"},
-            {"name": "Delete", "rect": QRect(2*width//3, 0, width//3, height), 
-             "color": QColor(255, 182, 193), "action": "d"}
+            {"name": "Delete", "rect": QRect(2*width//4, 0, width//4, height), 
+             "color": QColor(255, 182, 193), "action": "d"},
+             {"name": "Localize", "rect": QRect(3*width//4, 0, width//4, height),
+             "color": QColor(173, 216, 230), "action": "l"
+             }
         ]
         
         self.inactive_section = {
