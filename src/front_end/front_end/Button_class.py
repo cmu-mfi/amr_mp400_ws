@@ -40,9 +40,8 @@ class WaypointButton(QWidget):
              "color": QColor(255, 255, 153), "action": "o"},
             {"name": "Delete", "rect": QRect(2*width//4, 0, width//4, height), 
              "color": QColor(255, 182, 193), "action": "d"},
-             {"name": "Localize", "rect": QRect(3*width//4, 0, width//4, height),
-             "color": QColor(173, 216, 230), "action": "l"
-             }
+            {"name": "Localize", "rect": QRect(3*width//4, 0, width//4, height),
+            "color": QColor(173, 216, 230), "action": "l"}
         ]
         
         self.inactive_section = {
@@ -158,38 +157,38 @@ class WaypointButton(QWidget):
             print(f'Action {action} failed with response {future.msg}')
         else:
             print(f'Action {action} succeded with response {future.msg}')
-        if action == "g":
-            self.launch_rviz()
+        # if action == "g":
+        #     self.launch_rviz()
     
-    def launch_rviz(self):
-        try:
+#     def launch_rviz(self):
+#         try:
            
-            launch_script = """#!/bin/bash
-unset QT_QPA_PLATFORM_PLUGIN_PATH
-unset QT_PLUGIN_PATH
-export QT_QPA_PLATFORM=xcb
-source /opt/ros/$ROS_DISTRO/setup.bash
-source ~/mp_400_workspace/install/setup.bash
-exec ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
-"""
-            script_path = Path("/tmp/launch_rviz.sh")
-            script_path.write_text(launch_script)
-            script_path.chmod(0o755)
+#             launch_script = """#!/bin/bash
+# unset QT_QPA_PLATFORM_PLUGIN_PATH
+# unset QT_PLUGIN_PATH
+# export QT_QPA_PLATFORM=xcb
+# source /opt/ros/$ROS_DISTRO/setup.bash
+# source ~/mp_400_workspace/install/setup.bash
+# exec ros2 launch neo_nav2_bringup rviz_launch.py use_namespace:=True namespace:=$ROBOT_NAMESPACE
+# """
+#             script_path = Path("/tmp/launch_rviz.sh")
+#             script_path.write_text(launch_script)
+#             script_path.chmod(0o755)
             
-            # Launch RViz in a separate process
-            env = os.environ.copy()
-            env["ROBOT_NAMESPACE"] = self.robot_namespace  # Make sure this is set
-            self.rviz_process = subprocess.Popen(
-                [str(script_path)],
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            print("Launched rviz")
+#             # Launch RViz in a separate process
+#             env = os.environ.copy()
+#             env["ROBOT_NAMESPACE"] = self.robot_namespace  # Make sure this is set
+#             self.rviz_process = subprocess.Popen(
+#                 [str(script_path)],
+#                 env=env,
+#                 stdout=subprocess.PIPE,
+#                 stderr=subprocess.PIPE
+#             )
+#             print("Launched rviz")
 
             
-        except Exception as e:
-            print(f"RViz launch error: {str(e)}")
+#         except Exception as e:
+#             print(f"RViz launch error: {str(e)}")
 
     #     self._setup_status_monitoring()
 

@@ -1,6 +1,7 @@
 import os
 import rclpy
 import json
+import rclpy.time
 import tf2_ros
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
@@ -45,6 +46,12 @@ class WaypointSrv(Node):
         self.pub = self.create_publisher(
             Int32, 
             '/waypoint_amount', 
+            10
+        )
+
+        self.pose_pub = self.create_publisher(
+            PoseWithCovarianceStamped,
+            '/robot1/initialpose',
             10
         )
 
@@ -152,27 +159,7 @@ class WaypointSrv(Node):
                 # Want a localize case with the marker pose
             case "l":
                 self.get_logger().info("Localizing with marker pose")
-                if self.back_marker:
-                    self.pose_pub = self.create_publisher(
-                        PoseWithCovarianceStamped, 
-                        '/initialpose',
-                        10
-                    )
-
-                    initial_pose = PoseWithCovarianceStamped()
-                    initial_pose.header = self.back_marker.header
-                    initial_pose.pose = self.back_marker.pose
-
-                    self.pose_pub.publish(initial_pose)
-                    response.success = True
-                    response.msg = "Published Initial Pose with Marker Pose"
-                    self.pose_pub.destroy()
-
-                    map_pose = self.marker_to_map()
-                    self.last_ground_truth = map_pose
-                else:
-                    response.success = False
-                    response.msg = "No Marker Pose to Localize with"
+                self.last_ground_truth = self.latest
 
 
 
@@ -200,7 +187,7 @@ class WaypointSrv(Node):
             if client_future.result(): 
                 # Save marker pose to last ground truth
                 self.get_logger().info('Pre-Docking Offset Success')
-                self.last_ground_truth = self.marker_to_map()
+                self.last_ground_truth = self.marker_to_map(self.back_marker)
 
 
     def append_write(self, pose, label, ind=None):
@@ -214,8 +201,11 @@ class WaypointSrv(Node):
         dict['marker_id'] = self.back_marker.id if self.back_marker else None
         dict['name'] = label
         
-        map_pose = self.marker_to_map()
+        map_pose = self.marker_to_map(self.back_marker)
         self.last_ground_truth = map_pose
+        if map_pose:
+            map_pose = self.create_pose_array(map_pose.pose.pose)
+        
         
         dict['marker_pose'] = map_pose #  transform from map to marker + marker offset from other file
         return True
@@ -245,11 +235,12 @@ class WaypointSrv(Node):
             return False
         
 
-        pose = self.pose_dict[index]
+        pose = self.pose_dict[index]["pose"]
 
         goal_pose = NavigateToPose.Goal()
         goal_pose.pose.header.frame_id = 'map'
         goal_pose.pose.header.stamp = self.get_clock().now().to_msg()
+        self.get_logger().info(f"Goal Pose = {pose}")
         goal_pose.pose.pose.position.x = float(pose[0])
         goal_pose.pose.pose.position.z = float(pose[2])
         goal_pose.pose.pose.position.y = float(pose[1])
@@ -289,10 +280,8 @@ class WaypointSrv(Node):
                 while not client.wait_for_service(timeout_sec=1.0):
                     self.get_logger().info('Pre Docking Docking Service not available, trying again...')
                 
-                client_request = GroundTruth.request()
+                client_request = GroundTruth.Request()
                 client_request.goal = self.last_goal.pose
-                client_request.last_ground_truth = self.last_ground_truth
-                client_request.curr_pose = self.latest
 
                 self.get_logger().info('Calling Pre-Docking Docking')
                 client_future = client.call_async(client_request)
@@ -343,17 +332,21 @@ class WaypointSrv(Node):
             new_dict[str(i)] = self.pose_dict[key]
         self.pose_dict = new_dict
 
-    def marker_to_map(self):
+    def marker_to_map(self, marker: Marker) -> PoseWithCovarianceStamped:
         try: 
+            self.get_logger().info(f"{self.back_marker.header.frame_id}")
             transform=self.tf_buffer.lookup_transform(
                 'map',
-                self.back_marker.header.frame_id,
-                self.back_marker.header.stamp,
+                marker.header.frame_id,
+                marker.header.stamp,
                 timeout=rclpy.duration.Duration(seconds=1.0)
             )
-            marker_pose = self.back_marker.pose.pose
-
-            map_pose = do_transform_pose_with_covariance_stamped(marker_pose, transform)
+            self.get_logger().info("Getting marker pose")
+            pose = PoseWithCovarianceStamped()
+            pose.header = marker.header
+            pose.pose = marker.pose
+            self.get_logger().info("Computing transform")
+            map_pose = do_transform_pose_with_covariance_stamped(pose, transform)
 
         except Exception as e:
             self.get_logger().info(f"Transform error with {e}")

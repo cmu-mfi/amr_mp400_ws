@@ -1,6 +1,5 @@
 geometry_msgs/PoseStamped goal
 geometry_msgs/PoseWithCovarianceStamped last_ground_truth
-geometry_msgs/PoseWithCovarianceStamped curr_pose
 ---
 bool success
 string msg

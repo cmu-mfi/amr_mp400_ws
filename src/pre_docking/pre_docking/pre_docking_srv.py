@@ -62,7 +62,7 @@ class PreDockingSrv(Node):
         self.docking_srv = self.create_service(GroundTruth, 'pre_docker_docking', self.docking_callback)
 
     def _pose_callback(self, msg: PoseWithCovarianceStamped):
-        self.latest_pose = msg.pose.pose
+        self.latest_pose = msg
 
     def _front_marker_callback(self, markers: MarkerArray):
         if self.goal_sent:
@@ -93,7 +93,6 @@ class PreDockingSrv(Node):
     
     def _back_marker_callback(self, markers: MarkerArray):
         if self.goal_sent:
-            self.back_marker = None
             return
         
         if len(markers.markers) == 0:
@@ -103,14 +102,12 @@ class PreDockingSrv(Node):
         
         if len(markers.markers) > 1:
             self.get_logger().info("Back Camera sees more than one marker")
-            self.back_marker = None
             return
         
         marker: Marker = markers.markers[0]
 
         if marker.id > 20:
             self.get_logger().info(f'Back Marker id too high: {marker.id}')
-            self.back_marker = None
             return
         
         self.back_marker = marker
@@ -155,9 +152,9 @@ class PreDockingSrv(Node):
         return response
     
     def docking_callback(self, request: GroundTruth.Request, response: GroundTruth.Response):
+        self.get_logger().info("IN DOCKING CALLBACK")
         self.lgt = request.last_ground_truth
         self.goal = request.goal
-        self.curr_pose = request.curr_pose
 
 
         # Robot should already be at nav2 position
@@ -168,16 +165,16 @@ class PreDockingSrv(Node):
                 response.success = False
                 # Do recovery policy here
 
-                self.recover(self.lgt, self.goal, self.curr_pose)
+                self.recover(self.lgt, self.goal)
 
-                response.message = 'No markers found for docking'
+                response.msg = 'No markers found for docking'
                 return response
             
             self.get_logger().info("FRONT MARKER FOUND")
             success = self.__turn_around()
             if not success:
                 response.success = False
-                response.message = 'Failed to Turn Around'
+                response.msg = 'Failed to Turn Around'
 
                 return response
 
@@ -187,12 +184,12 @@ class PreDockingSrv(Node):
         success = self.__send_docking_request()
         if not success:
             response.success = False
-            response.message = 'Docking Failed'
+            response.msg = 'Docking Failed'
             return response
         
         self.get_logger().info("Succesfully got Offsets")
         response.success = True
-        response.message = 'Docking Success'
+        response.msg = 'Docking Success'
 
         return response
 
@@ -260,7 +257,7 @@ class PreDockingSrv(Node):
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose.header.frame_id = 'map'
         goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
-        goal_msg.pose.pose.position = self.latest_pose.position
+        goal_msg.pose.pose.position = self.latest_pose.pose.pose.position
         goal_msg.pose.pose.orientation.x = quat_goal[1]  # transforms3d uses [w, x, y, z]
         goal_msg.pose.pose.orientation.y = quat_goal[2]
         goal_msg.pose.pose.orientation.z = quat_goal[3]
@@ -295,13 +292,14 @@ class PreDockingSrv(Node):
         else:
             self.get_logger().error("Nav2 failed to complete!")
 
-    def recover(self, lgt: PoseWithCovarianceStamped, goal: PoseStamped, curr_pose: PoseWithCovarianceStamped):
+    def recover(self, lgt: PoseWithCovarianceStamped, goal: PoseStamped):
         error = 0.05 # 5 % error
         remainder = 1 - error
+        curr_pose = self.latest_pose
 
         # Get positional error
-        x = (curr_pose.pose.position.x - lgt.pose.position.x) * remainder
-        y = (curr_pose.pose.position.y - lgt.pose.position.y) * remainder
+        x = (curr_pose.pose.pose.position.x - lgt.pose.pose.position.x) * remainder
+        y = (curr_pose.pose.pose.position.y - lgt.pose.pose.position.y) * remainder
 
         # Relocalize robot with new assumed position
         pose_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
@@ -345,7 +343,7 @@ class PreDockingSrv(Node):
         if result:
             if self.back_marker == None and self.front_marker == None: # Still no markers found
                 self.get_logger().info("Calling recovery again, no markers found")
-                self.recover(self.lgt, self.goal, self.latest_pose)
+                self.recover(self.lgt, self.goal)
             else: 
                 self.get_logger().info("Recovery completed successfully")
             

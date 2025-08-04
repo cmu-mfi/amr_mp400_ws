@@ -30,16 +30,16 @@ def generate_launch_description():
         arguments=[
             '0.0', '0.0', '0.3',  # X, Y, Z translation in meters
             '0.0', '0.0', '0.0',  # Roll, Pitch, Yaw rotation in radians
-            '/map',              # Parent frame ID
-            'robot1/base_link'           # Child frame ID
+            'robot1/base_link',              # Parent frame ID
+            'robot1_color_frame'              # Child frame ID
         ]
     )
 
 
 
     return LaunchDescription([
-        predocker_node,
-        transform_node,
+        frontend_node,
         waypointsrv_node,
-        frontend_node
+        predocker_node,
+        transform_node
   ])
