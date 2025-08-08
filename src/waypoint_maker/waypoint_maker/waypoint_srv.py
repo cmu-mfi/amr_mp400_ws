@@ -9,8 +9,9 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_srvs.srv import Trigger
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
-from amr_mp400_interfaces.srv import SetFlag, GroundTruth 
-from std_msgs.msg import Int32
+from amr_mp400_interfaces.srv import SetFlag
+from amr_mp400_interfaces.srv import GroundTruth
+from std_msgs.msg import Int32, String
 from aruco_msgs.msg import MarkerArray, Marker
 from tf2_ros import Buffer, TransformListener 
 from tf2_geometry_msgs import do_transform_pose_with_covariance_stamped
@@ -40,6 +41,9 @@ class WaypointSrv(Node):
             self._back_marker_callback,
             10
         )
+
+        self.state_client = self.create_client(String, '/robot_state_publishing')
+
 
         self.timer_period = 0.1
 
@@ -251,6 +255,11 @@ class WaypointSrv(Node):
 
         goal_future = self.action_client.send_goal_async(goal_pose)
         self.last_goal = goal_pose
+        if self.docking:
+            robot_state = "Moving With Docking"
+        else:
+            robot_state = "Moving Without Docking"
+        self.send_robot_state(robot_state)
         goal_future.add_done_callback(self.goal_response)
         return True
     
@@ -275,6 +284,7 @@ class WaypointSrv(Node):
         if result:
             # Nav2 completed, can do predocking
             if self.docking:
+                self.send_robot_state("Reached With Docking")
                 client = self.create_client(GroundTruth, 'pre_docker_docking')
 
                 while not client.wait_for_service(timeout_sec=1.0):
@@ -285,10 +295,13 @@ class WaypointSrv(Node):
 
                 self.get_logger().info('Calling Pre-Docking Docking')
                 client_future = client.call_async(client_request)
-
+            else: 
+                self.send_robot_state("Reached Without Docking")
+                
             self.get_logger().error("Nav2 complete!")
         
         else:
+            self.send_robot_state("Failure")
             self.get_logger().error("Nav2 failed to complete!")
     
     def pre_docker_response(self, future):
@@ -353,6 +366,16 @@ class WaypointSrv(Node):
             return False
 
         return map_pose
+    
+    def send_robot_state(self, str: str):
+        result = String()
+        result.data = str
+        self.get_logger().info(f"Publishing Robot State: {result.data}")
+        if self.state_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info("State Client Available, Publishing State")
+            self.state_client.call_async(result)
+        else:
+            self.get_logger().error("State Client not available, cannot publish state")
 
 ####################################################### End Helpers ##################################################################################
 

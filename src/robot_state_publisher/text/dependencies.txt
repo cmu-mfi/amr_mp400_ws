@@ -1,0 +1,11 @@
+{
+    "Idle": ["Failure", "Moving With Docking", "Moving Without Docking"],
+    "Failure": ["Idle"],
+    "Failure With Docking": ["Recovery"],
+    "Recovery": ["Moving With Docking", "Recovery"],
+    "Moving With Docking": ["Reached With Docking", "Failure With Docking"],
+    "Moving Without Docking": ["Reached Without Docking", "Failure"],
+    "Reached With Docking": ["Docking"],
+    "Reached Without Docking": ["Idle"],
+    "Docking": ["Idle"]
+} 

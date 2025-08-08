@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>front_end</name>
+  <name>robot_state_publisher</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
   <maintainer email="kacpergasior19@gmail.com">kaper</maintainer>
@@ -12,20 +12,6 @@
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
 
-  <depend>rclpy</depend>
-  <depend>std_msgs</depend>
-  <depend>sensor_msgs</depend>
-  <!-- <depend>sys</depend> -->
-  <!-- <depend>PySide6</depend> -->
-  <depend>cv_bridge</depend>
-  <depend>rqt_gui_py</depend>
-  <!-- <depend>os</depend> -->
-  <depend>waypoint_maker</depend>
-  <!-- <depend>subprocess</depend> -->
-  <depend>action_msgs</depend>
-  <depend>launch</depend>
-  <depend>launch_ros</depend>
-  <exec_depend>amr_mp400_interfaces</exec_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>

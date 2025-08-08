@@ -4,6 +4,7 @@ import numpy as np
 from rclpy.node import Node
 import time
 from std_srvs.srv import Trigger
+from std_msgs.msg import String
 from aruco_msgs.msg import MarkerArray, Marker
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
@@ -164,6 +165,7 @@ class PreDockingSrv(Node):
                 self.get_logger().info("NO FRONT MARKER FOUND")
                 response.success = False
                 # Do recovery policy here
+                self.__send_robot_state("Failure With Docking")
 
                 self.recover(self.lgt, self.goal)
 
@@ -309,6 +311,8 @@ class PreDockingSrv(Node):
         pose_msg.pose.pose.position.x = x
         pose_msg.pose.pose.position.y = y
 
+        self.__send_robot_state("Recovery")
+
         pose_pub.publish(pose_msg)
 
         pose_pub.destroy()
@@ -347,7 +351,15 @@ class PreDockingSrv(Node):
             else: 
                 self.get_logger().info("Recovery completed successfully")
             
-        
+    def __send_robot_state(self, str: str):
+        result = String()
+        result.data = str
+        self.get_logger().info(f"Publishing Robot State: {result.data}")
+        if self.state_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info("State Client Available, Publishing State")
+            self.state_client.call_async(result)
+        else:
+            self.get_logger().error("State Client not available, cannot publish state")
         
 
     

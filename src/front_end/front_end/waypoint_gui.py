@@ -7,8 +7,6 @@ def main():
     rclpy.init()
     ros_node = rclpy.create_node('robot_control_gui')
 
-    os.environ["ROS_DISTRO"] = "humble"  # or your distro
-    os.environ["WORKSPACE"] = "~/mp_400_ws/" 
     
     app = QApplication([])
     gui = RobotControlApp(ros_node)
