@@ -12,23 +12,7 @@ Once your workspace is built and sourced:
 
 2) Opening another terminal source the install file again and run:
 
-   ` ros2 run waypoint_maker waypoint_client <f> <i> <d>`
+   ` ros2 run waypoint_maker waypoint_client <f> <i> <d> <label>`
 
-   where f, i, d are the flags, index, and docking respectively
+   where f, i, d <label> are the flags, index, docking, and label as described in amr_mp400_interfaces
 
-### Flags and Indices: 
-**a** -> Append a pose to the file; Index doesnt matter for this operation but is still needed to be input
-
-**o** -> Overwrite a pose at index i with the current robot pose
-
-**d** -> Delete a pose at index i
-
-**w** -> Delete all poses and add the current robot pose as the only pose in the file
-
-**g** -> Publish pose described at index i to the goal_pose topic
-
-### Docking Toggle:
-
-**d** -> Starts docking procedure after navigation completes
-
-**Note:** Anything in this option will not do anything except for the letter d, but is still needed for program to run
